@@ -58,6 +58,19 @@ def create_app() -> FastAPI:
             except Exception:
                 logger.exception("Failed to start Slack listener")
 
+        # Start Jira ticket sync if configured
+        jira = IntegrationRegistry.get("jira")
+        if jira is not None:
+            try:
+                from app.integrations.jira.client import JiraIntegration
+                from app.integrations.jira.sync import start_sync
+
+                if isinstance(jira, JiraIntegration):
+                    start_sync(jira)
+                    logger.info("Jira ticket sync started")
+            except Exception:
+                logger.exception("Failed to start Jira sync")
+
     # Register routers
     app.include_router(tasks_router)
     app.include_router(dashboard_router)

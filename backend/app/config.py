@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     jira_email: str = ""
     jira_api_token: str = ""
     jira_project_key: str = "SWE"
+    jira_sync_interval_seconds: int = 300
+    jira_sync_label: str = "corsair"
 
     # GitHub
     github_token: str = ""
