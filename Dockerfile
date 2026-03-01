@@ -44,9 +44,13 @@ COPY --from=frontend-build /app/frontend/dist /usr/share/nginx/html
 COPY infra/nginx.conf /etc/nginx/conf.d/default.conf
 COPY infra/supervisord.conf /etc/supervisor/conf.d/corsair.conf
 
+# Copy entrypoint script
+COPY infra/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Remove default nginx config
 RUN rm -f /etc/nginx/sites-enabled/default
 
 EXPOSE 80 8000
 
-CMD ["supervisord", "-n", "-c", "/etc/supervisor/conf.d/corsair.conf"]
+ENTRYPOINT ["/app/entrypoint.sh"]

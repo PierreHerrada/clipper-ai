@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Documentation — Corsair</title>
+  <meta name="description" content="Corsair documentation: setup guide, configuration, integrations, and development workflow." />
+  <meta name="theme-color" content="#0a0a0f" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Reset & Base ─────────────────────────────────── */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; font-size: 16px; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0a0a0f;
+      color: #e2e2e8;
+      line-height: 1.7;
+      overflow-x: hidden;
+    }
+    a { color: #a5b4fc; text-decoration: none; }
+    a:hover { color: #c7d2fe; text-decoration: underline; }
+    code, .mono { font-family: 'JetBrains Mono', monospace; }
+    img { max-width: 100%; display: block; }
+
+    /* ── Utility ──────────────────────────────────────── */
+    .container { max-width: 860px; margin: 0 auto; padding: 0 2rem; }
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* ── Ambient glow ─────────────────────────────────── */
+    .glow {
+      position: fixed;
+      width: 600px; height: 600px;
+      border-radius: 50%;
+      filter: blur(180px);
+      opacity: 0.08;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .glow-1 { top: -200px; left: -100px;  background: #6366f1; }
+    .glow-2 { top: 40%;    right: -200px; background: #a855f7; }
+
+    /* ── Nav ──────────────────────────────────────────── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0;
+      z-index: 100;
+      background: rgba(10,10,15,0.75);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    nav .nav-container {
+      max-width: 1200px; margin: 0 auto; padding: 0 2rem;
+      display: flex; align-items: center; justify-content: space-between;
+      height: 4rem;
+    }
+    .nav-logo {
+      font-size: 1.25rem; font-weight: 700;
+      display: flex; align-items: center; gap: 0.5rem;
+      color: #e2e2e8; text-decoration: none;
+    }
+    .nav-logo:hover { color: #fff; text-decoration: none; }
+    .nav-logo svg { width: 28px; height: 28px; }
+    .nav-links { display: flex; gap: 2rem; align-items: center; }
+    .nav-links a {
+      font-size: 0.875rem; font-weight: 500;
+      color: #9ca3af; text-decoration: none;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: #fff; text-decoration: none; }
+    .nav-links a.active { color: #a5b4fc; }
+    .btn-ghost {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.6rem 1.4rem;
+      border-radius: 0.5rem;
+      font-size: 0.875rem; font-weight: 600;
+      background: rgba(255,255,255,0.05);
+      color: #e2e2e8;
+      border: 1px solid rgba(255,255,255,0.1);
+      transition: all 0.2s;
+      text-decoration: none;
+    }
+    .btn-ghost:hover { background: rgba(255,255,255,0.1); text-decoration: none; }
+
+    /* ── Doc layout ───────────────────────────────────── */
+    .doc-wrapper {
+      display: flex;
+      padding-top: 4rem;
+      min-height: 100vh;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 240px;
+      flex-shrink: 0;
+      position: fixed;
+      top: 4rem;
+      left: 0;
+      bottom: 0;
+      padding: 2rem 1.5rem;
+      overflow-y: auto;
+      border-right: 1px solid rgba(255,255,255,0.06);
+      background: rgba(10,10,15,0.5);
+    }
+    .sidebar-section {
+      margin-bottom: 1.75rem;
+    }
+    .sidebar-section h4 {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #6b7280;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .sidebar-section a {
+      display: block;
+      font-size: 0.85rem;
+      color: #9ca3af;
+      padding: 0.3rem 0;
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+    .sidebar-section a:hover { color: #e2e2e8; text-decoration: none; }
+
+    /* Content */
+    .doc-content {
+      margin-left: 240px;
+      flex: 1;
+      padding: 3rem 3rem 6rem;
+      max-width: 860px;
+    }
+
+    /* ── Typography ───────────────────────────────────── */
+    .doc-content h1 {
+      font-size: 2.25rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.75rem;
+      color: #fff;
+    }
+    .doc-content .subtitle {
+      font-size: 1.1rem;
+      color: #6b7280;
+      margin-bottom: 3rem;
+    }
+    .doc-content h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #fff;
+      margin-top: 3.5rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .doc-content h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: #e2e2e8;
+      margin-top: 2rem;
+      margin-bottom: 0.75rem;
+    }
+    .doc-content p {
+      font-size: 0.95rem;
+      color: #c9c9d0;
+      margin-bottom: 1rem;
+    }
+    .doc-content ul, .doc-content ol {
+      margin-bottom: 1rem;
+      padding-left: 1.5rem;
+    }
+    .doc-content li {
+      font-size: 0.95rem;
+      color: #c9c9d0;
+      margin-bottom: 0.35rem;
+    }
+    .doc-content li code,
+    .doc-content p code {
+      background: rgba(99,102,241,0.1);
+      border: 1px solid rgba(99,102,241,0.15);
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      font-size: 0.85em;
+      color: #c7d2fe;
+    }
+
+    /* ── Code blocks ──────────────────────────────────── */
+    .code-block {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 0.75rem;
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+    .code-header {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.6rem 1.25rem;
+      background: rgba(255,255,255,0.04);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .code-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .code-dot:nth-child(1) { background: #ef4444; }
+    .code-dot:nth-child(2) { background: #eab308; }
+    .code-dot:nth-child(3) { background: #22c55e; }
+    .code-header span { margin-left: auto; font-size: 0.75rem; color: #4b5563; }
+    .code-body {
+      padding: 1.25rem;
+      font-size: 0.83rem;
+      line-height: 1.85;
+      overflow-x: auto;
+      color: #c9c9d0;
+    }
+    .code-body .comment { color: #4b5563; }
+    .code-body .cmd { color: #86efac; }
+    .code-body .flag { color: #a5b4fc; }
+    .code-body .str { color: #fbbf24; }
+
+    /* ── Tables ───────────────────────────────────────── */
+    .doc-content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1.5rem;
+      font-size: 0.88rem;
+    }
+    .doc-content th {
+      text-align: left;
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      color: #9ca3af;
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .doc-content td {
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      color: #c9c9d0;
+    }
+    .doc-content td code {
+      background: rgba(99,102,241,0.1);
+      border: 1px solid rgba(99,102,241,0.15);
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.82em;
+      color: #c7d2fe;
+    }
+
+    /* ── Callout boxes ────────────────────────────────── */
+    .callout {
+      padding: 1rem 1.25rem;
+      border-radius: 0.5rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.9rem;
+    }
+    .callout-info {
+      background: rgba(99,102,241,0.08);
+      border: 1px solid rgba(99,102,241,0.15);
+      color: #c7d2fe;
+    }
+    .callout-warn {
+      background: rgba(234,179,8,0.08);
+      border: 1px solid rgba(234,179,8,0.15);
+      color: #fde68a;
+    }
+    .callout strong { color: #fff; }
+
+    /* ── Footer ───────────────────────────────────────── */
+    footer {
+      border-top: 1px solid rgba(255,255,255,0.06);
+      padding: 2rem 0;
+      margin-left: 240px;
+    }
+    .footer-inner {
+      max-width: 860px;
+      padding: 0 3rem;
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 1rem;
+    }
+    .footer-left { font-size: 0.85rem; color: #4b5563; }
+    .footer-links { display: flex; gap: 1.5rem; }
+    .footer-links a { font-size: 0.85rem; color: #6b7280; text-decoration: none; transition: color 0.2s; }
+    .footer-links a:hover { color: #fff; text-decoration: none; }
+
+    /* ── Responsive ───────────────────────────────────── */
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .doc-content { margin-left: 0; padding: 2rem 1.5rem 4rem; }
+      footer { margin-left: 0; }
+      .footer-inner { padding: 0 1.5rem; }
+      .nav-links { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Ambient glow -->
+<div class="glow glow-1"></div>
+<div class="glow glow-2"></div>
+
+<!-- Nav -->
+<nav>
+  <div class="nav-container">
+    <a href="index.html" class="nav-logo">
+      <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="8" fill="url(#logo-grad)"/>
+        <path d="M10 22L16 10L22 22" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M12.5 18H19.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+        <defs><linearGradient id="logo-grad" x1="0" y1="0" x2="32" y2="32"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#a855f7"/></linearGradient></defs>
+      </svg>
+      Corsair
+    </a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="docs.html" class="active">Docs</a>
+      <a href="https://github.com/PierreHerrada/clipper-ai" class="btn-ghost">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </div>
+</nav>
+
+<div class="doc-wrapper">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <h4>Getting Started</h4>
+      <a href="#overview">Overview</a>
+      <a href="#prerequisites">Prerequisites</a>
+      <a href="#quick-start">Quick Start</a>
+    </div>
+    <div class="sidebar-section">
+      <h4>Configuration</h4>
+      <a href="#env-vars">Environment Variables</a>
+      <a href="#slack-setup">Slack</a>
+      <a href="#jira-setup">Jira</a>
+      <a href="#github-setup">GitHub</a>
+    </div>
+    <div class="sidebar-section">
+      <h4>Development</h4>
+      <a href="#local-dev">Local Development</a>
+      <a href="#backend-dev">Backend</a>
+      <a href="#frontend-dev">Frontend</a>
+      <a href="#testing">Testing</a>
+    </div>
+    <div class="sidebar-section">
+      <h4>Architecture</h4>
+      <a href="#architecture">Overview</a>
+      <a href="#pipeline">Agent Pipeline</a>
+      <a href="#integrations">Integrations</a>
+    </div>
+    <div class="sidebar-section">
+      <h4>Deployment</h4>
+      <a href="#docker">Docker</a>
+      <a href="#production">Production</a>
+    </div>
+  </aside>
+
+  <!-- Content -->
+  <main class="doc-content">
+    <h1><span class="gradient-text">Documentation</span></h1>
+    <p class="subtitle">Everything you need to set up, configure, and develop with Corsair.</p>
+
+    <!-- ── Getting Started ──────────────────────────── -->
+    <h2 id="overview">Overview</h2>
+    <p>
+      Corsair is an open-source AI software engineering platform. It connects Slack, Jira, GitHub, and Claude Code into a unified autonomous workflow. Tag <code>@corsair</code> in Slack, and the platform plans the work, writes the code, and opens a pull request — with human approval at every stage.
+    </p>
+    <p>
+      The entire platform ships as a single Docker image using <strong>supervisord</strong> to run an nginx reverse proxy (serving the React frontend) and a uvicorn server (running the FastAPI backend with WebSocket and Slack bot support).
+    </p>
+
+    <h2 id="prerequisites">Prerequisites</h2>
+    <ul>
+      <li><strong>Docker</strong> and <strong>Docker Compose</strong> (for containerised setup)</li>
+      <li><strong>Python 3.12+</strong> (for local backend development)</li>
+      <li><strong>Node.js 20+</strong> and <strong>npm</strong> (for local frontend development)</li>
+      <li><strong>PostgreSQL 15+</strong> (or use Docker Compose which provides it)</li>
+      <li>An <strong>Anthropic API key</strong> for Claude</li>
+    </ul>
+
+    <h2 id="quick-start">Quick Start</h2>
+    <p>The fastest way to get Corsair running locally is with Docker Compose:</p>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+        <span>terminal</span>
+      </div>
+      <pre class="code-body mono"><span class="comment"># Clone the repository</span>
+<span class="cmd">git clone</span> https://github.com/PierreHerrada/clipper-ai.git
+<span class="cmd">cd</span> clipper-ai
+
+<span class="comment"># Copy and configure environment variables</span>
+<span class="cmd">cp</span> .env.example .env
+<span class="comment"># Edit .env with your credentials (see Environment Variables below)</span>
+
+<span class="comment"># Start the full stack</span>
+<span class="cmd">docker-compose up</span> <span class="flag">--build</span></pre>
+    </div>
+    <p>Once started, the web UI is available at <code>http://localhost</code> and the API at <code>http://localhost:8000</code>.</p>
+    <div class="callout callout-info">
+      <strong>Integrations are opt-in.</strong> If Slack, Jira, or GitHub env vars are missing, those integrations stay inactive — the app still boots and works without them.
+    </div>
+
+    <!-- ── Configuration ────────────────────────────── -->
+    <h2 id="env-vars">Environment Variables</h2>
+    <p>Copy <code>.env.example</code> to <code>.env</code> and fill in the values you need.</p>
+    <table>
+      <thead>
+        <tr><th>Variable</th><th>Description</th><th>Required</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>ANTHROPIC_API_KEY</code></td><td>Anthropic API key for Claude</td><td>Yes</td></tr>
+        <tr><td><code>DATABASE_URL</code></td><td>PostgreSQL connection string</td><td>Yes</td></tr>
+        <tr><td><code>ADMIN_PASSWORD</code></td><td>Admin password for the web UI</td><td>Yes</td></tr>
+        <tr><td><code>ENVIRONMENT</code></td><td><code>development</code> or <code>production</code></td><td>Yes</td></tr>
+        <tr><td><code>SLACK_BOT_TOKEN</code></td><td>Slack bot OAuth token (<code>xoxb-...</code>)</td><td>For Slack</td></tr>
+        <tr><td><code>SLACK_APP_TOKEN</code></td><td>Slack app-level token (<code>xapp-...</code>)</td><td>For Slack</td></tr>
+        <tr><td><code>JIRA_BASE_URL</code></td><td>Jira instance URL</td><td>For Jira</td></tr>
+        <tr><td><code>JIRA_EMAIL</code></td><td>Jira account email</td><td>For Jira</td></tr>
+        <tr><td><code>JIRA_API_TOKEN</code></td><td>Jira API token</td><td>For Jira</td></tr>
+        <tr><td><code>JIRA_PROJECT_KEY</code></td><td>Jira project key (e.g. <code>SWE</code>)</td><td>For Jira</td></tr>
+        <tr><td><code>GITHUB_TOKEN</code></td><td>GitHub personal access token</td><td>For GitHub</td></tr>
+        <tr><td><code>GITHUB_ORG</code></td><td>GitHub organisation name</td><td>For GitHub</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="slack-setup">Slack Setup</h2>
+    <ol>
+      <li>Create a Slack app at <a href="https://api.slack.com" target="_blank">api.slack.com</a></li>
+      <li>Enable <strong>Socket Mode</strong> and generate an app-level token (<code>xapp-...</code>)</li>
+      <li>Under <strong>OAuth &amp; Permissions</strong>, add the scopes: <code>app_mentions:read</code>, <code>chat:write</code></li>
+      <li>Install the app to your workspace and copy the <strong>Bot User OAuth Token</strong> (<code>xoxb-...</code>)</li>
+      <li>Set <code>SLACK_BOT_TOKEN</code> and <code>SLACK_APP_TOKEN</code> in your <code>.env</code></li>
+    </ol>
+
+    <h2 id="jira-setup">Jira Setup</h2>
+    <ol>
+      <li>Generate an API token at <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank">id.atlassian.com</a></li>
+      <li>Set <code>JIRA_BASE_URL</code> (e.g. <code>https://yourorg.atlassian.net</code>), <code>JIRA_EMAIL</code>, <code>JIRA_API_TOKEN</code>, and <code>JIRA_PROJECT_KEY</code></li>
+    </ol>
+
+    <h2 id="github-setup">GitHub Setup</h2>
+    <ol>
+      <li>Create a <a href="https://github.com/settings/tokens" target="_blank">personal access token</a> with the <code>repo</code> scope</li>
+      <li>Set <code>GITHUB_TOKEN</code> and <code>GITHUB_ORG</code> in your <code>.env</code></li>
+    </ol>
+
+    <!-- ── Development ──────────────────────────────── -->
+    <h2 id="local-dev">Local Development</h2>
+    <p>
+      For development, you can run the backend and frontend separately. Make sure PostgreSQL is running locally or via Docker.
+    </p>
+
+    <h3 id="backend-dev">Backend</h3>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+        <span>backend</span>
+      </div>
+      <pre class="code-body mono"><span class="cmd">cd</span> backend
+
+<span class="comment"># Install dependencies</span>
+<span class="cmd">pip install</span> <span class="flag">-r</span> requirements.txt
+
+<span class="comment"># Run the dev server</span>
+<span class="cmd">uvicorn</span> app.main:app <span class="flag">--reload</span> <span class="flag">--port</span> 8000
+
+<span class="comment"># Lint &amp; format</span>
+<span class="cmd">ruff check</span> app/ tests/
+<span class="cmd">ruff format</span> app/ tests/</pre>
+    </div>
+
+    <h3 id="frontend-dev">Frontend</h3>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+        <span>frontend</span>
+      </div>
+      <pre class="code-body mono"><span class="cmd">cd</span> frontend
+
+<span class="comment"># Install dependencies</span>
+<span class="cmd">npm ci</span>
+
+<span class="comment"># Start dev server (hot-reload)</span>
+<span class="cmd">npm run</span> dev
+
+<span class="comment"># Lint &amp; format</span>
+<span class="cmd">npm run</span> lint
+<span class="cmd">npm run</span> format
+
+<span class="comment"># Production build</span>
+<span class="cmd">npm run</span> build</pre>
+    </div>
+
+    <h3 id="testing">Testing</h3>
+    <p>Both backend and frontend enforce a minimum of <strong>80% code coverage</strong>.</p>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+        <span>tests</span>
+      </div>
+      <pre class="code-body mono"><span class="comment"># Backend tests with coverage</span>
+<span class="cmd">cd</span> backend
+<span class="cmd">pytest</span> tests/ <span class="flag">--cov=app</span> <span class="flag">--cov-fail-under=80</span>
+
+<span class="comment"># Frontend tests with coverage</span>
+<span class="cmd">cd</span> frontend
+<span class="cmd">npm test</span> <span class="flag">-- --coverage</span></pre>
+    </div>
+    <div class="callout callout-warn">
+      <strong>Never call real external APIs in tests.</strong> Always mock Slack, Jira, GitHub, and Anthropic calls. The CI pipeline enforces this.
+    </div>
+
+    <!-- ── Architecture ─────────────────────────────── -->
+    <h2 id="architecture">Architecture Overview</h2>
+    <p>
+      Corsair runs as a single Docker image managed by <strong>supervisord</strong>, which starts two processes:
+    </p>
+    <ul>
+      <li><strong>nginx</strong> on port 80 — serves the React static build and proxies API/WebSocket requests to uvicorn</li>
+      <li><strong>uvicorn</strong> on port 8000 — runs the FastAPI application (REST API, WebSocket server, Slack bot)</li>
+    </ul>
+    <p>
+      The backend connects to a PostgreSQL database (local for dev, RDS for production) and communicates with external services through a plugin-based integration registry.
+    </p>
+
+    <h3 id="pipeline">Three-Stage Agent Pipeline</h3>
+    <p>
+      Every task goes through three stages, each manually triggered from the web UI:
+    </p>
+    <ol>
+      <li><strong>Plan</strong> — Claude Code analyses the task, reads the codebase, and produces a structured implementation plan</li>
+      <li><strong>Work</strong> — Claude Code executes the plan: writes code, creates branches, and opens a pull request on GitHub</li>
+      <li><strong>Review</strong> — Claude Code reviews the diff, checks for issues, and validates the implementation against the original task</li>
+    </ol>
+    <p>
+      Each stage streams logs in real-time via WebSocket. Token usage and costs are recorded per stage.
+    </p>
+
+    <h3 id="integrations">Integrations</h3>
+    <p>
+      Integrations live in <code>backend/app/integrations/</code>, each in its own directory. Built-in integrations:
+    </p>
+    <ul>
+      <li><strong>Slack</strong> — Socket Mode bot that listens for <code>@corsair</code> mentions and creates tasks</li>
+      <li><strong>Jira</strong> — Creates and updates Jira tickets for each task</li>
+      <li><strong>GitHub</strong> — Opens pull requests with branch management and Jira linking</li>
+    </ul>
+    <p>
+      To add a new integration, create a new directory under <code>backend/app/integrations/</code> and follow the patterns in <a href="https://github.com/PierreHerrada/clipper-ai/blob/main/INTEGRATIONS.md">INTEGRATIONS.md</a>.
+    </p>
+
+    <!-- ── Deployment ───────────────────────────────── -->
+    <h2 id="docker">Docker</h2>
+    <p>
+      The multi-stage Dockerfile builds both the React frontend and the Python backend into a single image:
+    </p>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+        <span>docker</span>
+      </div>
+      <pre class="code-body mono"><span class="comment"># Build and run with Docker Compose</span>
+<span class="cmd">docker-compose up</span> <span class="flag">--build</span>
+
+<span class="comment"># Run tests inside the container</span>
+<span class="cmd">docker-compose run</span> backend pytest
+
+<span class="comment"># Build the image standalone</span>
+<span class="cmd">docker build</span> <span class="flag">-t</span> corsair .</pre>
+    </div>
+
+    <h3 id="production">Production Deployment</h3>
+    <p>
+      Corsair is designed to run on <strong>AWS ECS Fargate</strong>. The <code>infra/</code> directory contains:
+    </p>
+    <ul>
+      <li><code>ecs-task-definition.json</code> — ECS task definition for Fargate</li>
+      <li><code>nginx.conf</code> — Nginx config that proxies <code>/api</code> and <code>/ws</code> to uvicorn</li>
+      <li><code>supervisord.conf</code> — Process manager configuration</li>
+      <li><code>deploy.sh</code> — Deployment script</li>
+    </ul>
+    <p>
+      Set <code>ENVIRONMENT=production</code> and configure your <code>DATABASE_URL</code> to point to an RDS PostgreSQL instance. All secrets should be managed through environment variables — never hardcoded.
+    </p>
+    <div class="callout callout-info">
+      <strong>CI/CD</strong> is handled by GitHub Actions. The pipeline runs backend and frontend tests, enforces 80% coverage, and uploads coverage reports to Codecov on every push and pull request.
+    </div>
+
+  </main>
+</div>
+
+<!-- Footer -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">&copy; 2025 Corsair &mdash; Open-source AI software engineering platform.</div>
+    <div class="footer-links">
+      <a href="https://github.com/PierreHerrada/clipper-ai">GitHub</a>
+      <a href="https://github.com/PierreHerrada/clipper-ai/blob/main/CONTRIBUTING.md">Contributing</a>
+      <a href="https://github.com/PierreHerrada/clipper-ai/blob/main/LICENSE">License</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
