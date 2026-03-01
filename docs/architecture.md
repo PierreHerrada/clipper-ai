@@ -208,7 +208,33 @@ Secrets Manager (all env vars injected at runtime)
 
 ### RDS Setup
 
-1. Create a PostgreSQL 15 instance on RDS
-2. Configure security group to allow inbound from ECS task security group
-3. Set `DATABASE_URL` in Secrets Manager
-4. The app applies migrations on startup via Aerich
+1. **Create RDS Instance**
+   - Engine: PostgreSQL 15
+   - Instance class: `db.t3.micro` (dev) or `db.t3.medium` (prod)
+   - Storage: 20 GB gp3
+   - Database name: `corsair`
+   - Master username: `corsair`
+   - Enable encryption at rest
+   - Disable public access
+
+2. **Configure Security Groups**
+   - Create an RDS security group allowing inbound PostgreSQL (port 5432) from the ECS task security group
+   - The ECS task security group should allow outbound to RDS on port 5432
+
+3. **Store Connection String in Secrets Manager**
+   - Secret name: `corsair/database-url`
+   - Value: `postgres://corsair:<password>@<rds-endpoint>:5432/corsair`
+
+4. **Verify Connectivity**
+   - Deploy the ECS task and check logs for successful database connection
+   - Aerich will apply migrations automatically on startup
+
+### Required GitHub Actions Secrets
+
+| Secret | Description |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | IAM access key for ECR push and ECS deploy |
+| `AWS_SECRET_ACCESS_KEY` | IAM secret key |
+| `ECR_REGISTRY` | ECR registry URL (e.g., `123456789.dkr.ecr.us-east-1.amazonaws.com`) |
+| `GIST_TOKEN` | GitHub token with gist scope (for badges workflow) |
+| `GIST_ID` | Gist ID for coverage badge JSON |
