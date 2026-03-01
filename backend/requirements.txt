@@ -4,7 +4,6 @@ uvicorn[standard]==0.34.0
 
 # Database
 tortoise-orm[asyncpg]==0.22.1
-aerich==0.8.1
 asyncpg==0.30.0
 
 # Slack

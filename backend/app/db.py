@@ -11,7 +11,6 @@ TORTOISE_ORM = {
                 "app.models.agent_run",
                 "app.models.agent_log",
                 "app.models.conversation",
-                "aerich.models",
             ],
             "default_connection": "default",
         },
