@@ -5,8 +5,6 @@
 
 **Corsair** is an open-source AI software engineering platform that bridges Slack, Jira, GitHub, and Claude Code into a unified workflow. Tag `@corsair` in Slack, and it autonomously plans, codes, and opens a PR — with human approval at every stage.
 
-> A corsair is an autonomous sailing vessel that operates independently across open waters — a precise metaphor for an agent that takes a task from Slack and sails autonomously through plan, code, and PR without constant supervision.
-
 ![Screenshot placeholder](docs/screenshot-placeholder.png)
 
 ## Features
@@ -126,6 +124,20 @@ npm run build
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and PR process.
+
+## Why "Corsair"?
+
+A **corsair** was a privateer that roamed the Mediterranean — fast, autonomous, and lethal effective without a fleet behind it. No admiral on the radio. No convoy required. Just a single ship, a mission, and the skill to get it done.
+
+That's exactly what this project does. You drop a task in Slack, and Corsair sails through plan, code, and PR on its own — no hand-holding, no babysitting.
+
+The name stuck for a few reasons:
+
+- **Autonomous by nature** — corsairs operated independently across open water; this agent operates independently across your entire toolchain.
+- **Mediterranean roots** — the project was born in Barcelona, a city built by the sea, where corsair history is part of the harbour walls. The creator loves boats. It fits.
+- **Short, sharp, universal** — five letters, works in every language, no existing dev tool claiming it for this purpose.
+
+Some software needs a fleet. Corsair just needs a heading.
 
 ## License
 
