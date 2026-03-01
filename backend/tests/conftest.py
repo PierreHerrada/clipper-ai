@@ -6,6 +6,7 @@ from tortoise import Tortoise
 from app.models import (
     AgentLog,
     AgentRun,
+    ChatMessage,
     Conversation,
     LogType,
     MessageRole,
@@ -22,6 +23,7 @@ MODELS = [
     "app.models.agent_run",
     "app.models.agent_log",
     "app.models.conversation",
+    "app.models.chat_message",
 ]
 
 
@@ -79,4 +81,17 @@ async def sample_conversation(sample_task):
         role=MessageRole.USER,
         message="Please implement the feature",
         slack_ts="1234567890.123456",
+    )
+
+
+@pytest.fixture
+async def sample_chat_message():
+    return await ChatMessage.create(
+        id=uuid.uuid4(),
+        channel_id="C123456",
+        channel_name="general",
+        user_id="U789012",
+        user_name="Jane Doe",
+        message="Hello from Slack!",
+        slack_ts="1234567890.111111",
     )

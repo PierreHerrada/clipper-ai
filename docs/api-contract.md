@@ -199,6 +199,66 @@ Returns status of all registered integrations.
 ]
 ```
 
+#### `GET /api/v1/integrations/health`
+
+Performs real health checks against each configured integration (network calls with 10s timeout each). Unconfigured integrations skip the health check.
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "name": "slack",
+    "description": "Slack bot for task creation and status updates",
+    "configured": true,
+    "healthy": true,
+    "error": null
+  },
+  {
+    "name": "jira",
+    "description": "Jira integration for ticket management",
+    "configured": false,
+    "healthy": null,
+    "error": null
+  }
+]
+```
+
+---
+
+### Chat
+
+#### `GET /api/v1/chat/messages`
+
+Returns paginated chat messages from the Slack listener.
+
+**Query Parameters:**
+- `limit` (int, default 50, max 200) — Number of messages to return
+- `offset` (int, default 0) — Pagination offset
+- `channel_id` (string, optional) — Filter by Slack channel ID
+
+**Response:** `200 OK`
+```json
+{
+  "total": 142,
+  "offset": 0,
+  "limit": 50,
+  "messages": [
+    {
+      "id": "uuid",
+      "channel_id": "C123456",
+      "channel_name": "general",
+      "user_id": "U123456",
+      "user_name": "Jane Doe",
+      "message": "Hello world",
+      "slack_ts": "1234567890.123456",
+      "thread_ts": null,
+      "task_id": "uuid|null",
+      "created_at": "ISO 8601"
+    }
+  ]
+}
+```
+
 ---
 
 ## WebSocket
@@ -293,5 +353,33 @@ interface IntegrationStatus {
   description: string;
   active: boolean;
   missing_env_vars: string[];
+}
+
+interface IntegrationHealth {
+  name: string;
+  description: string;
+  configured: boolean;
+  healthy: boolean | null;
+  error: string | null;
+}
+
+interface ChatMessage {
+  id: string;
+  channel_id: string;
+  channel_name: string;
+  user_id: string;
+  user_name: string;
+  message: string;
+  slack_ts: string;
+  thread_ts: string | null;
+  task_id: string | null;
+  created_at: string;
+}
+
+interface ChatMessagesResponse {
+  total: number;
+  offset: number;
+  limit: number;
+  messages: ChatMessage[];
 }
 ```

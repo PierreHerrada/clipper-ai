@@ -1,7 +1,9 @@
 import { Route, Routes } from "react-router-dom";
 import Board from "./pages/Board";
+import Chat from "./pages/Chat";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
+import Status from "./pages/Status";
 
 export default function App() {
   return (
@@ -15,10 +17,18 @@ export default function App() {
         <a href="/dashboard" className="text-mist hover:text-white text-sm">
           Dashboard
         </a>
+        <a href="/status" className="text-mist hover:text-white text-sm">
+          Status
+        </a>
+        <a href="/chat" className="text-mist hover:text-white text-sm">
+          Chat
+        </a>
       </nav>
       <Routes>
         <Route path="/" element={<Board />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/status" element={<Status />} />
+        <Route path="/chat" element={<Chat />} />
         <Route path="/login" element={<Login />} />
       </Routes>
     </div>

@@ -6,6 +6,7 @@ import pytest
 from app.models import (
     AgentLog,
     AgentRun,
+    ChatMessage,
     Conversation,
     LogType,
     MessageRole,
@@ -177,3 +178,54 @@ class TestConversation:
 
     async def test_conversation_str(self, sample_conversation):
         assert "user" in str(sample_conversation)
+
+
+class TestChatMessage:
+    async def test_create_chat_message(self, sample_chat_message):
+        assert sample_chat_message.channel_id == "C123456"
+        assert sample_chat_message.channel_name == "general"
+        assert sample_chat_message.user_id == "U789012"
+        assert sample_chat_message.user_name == "Jane Doe"
+        assert sample_chat_message.message == "Hello from Slack!"
+        assert sample_chat_message.slack_ts == "1234567890.111111"
+        assert sample_chat_message.thread_ts is None
+        assert sample_chat_message.task_id is None
+
+    async def test_chat_message_defaults(self):
+        msg = await ChatMessage.create(
+            id=uuid.uuid4(),
+            channel_id="C1",
+            user_id="U1",
+            message="Test",
+            slack_ts="1.1",
+        )
+        assert msg.channel_name == ""
+        assert msg.user_name == ""
+        assert msg.thread_ts is None
+        assert msg.task_id is None
+
+    async def test_chat_message_with_thread(self):
+        msg = await ChatMessage.create(
+            id=uuid.uuid4(),
+            channel_id="C1",
+            user_id="U1",
+            message="Thread reply",
+            slack_ts="1.2",
+            thread_ts="1.1",
+        )
+        assert msg.thread_ts == "1.1"
+
+    async def test_chat_message_with_task(self, sample_task):
+        msg = await ChatMessage.create(
+            id=uuid.uuid4(),
+            channel_id="C1",
+            user_id="U1",
+            message="Related to task",
+            slack_ts="1.3",
+            task=sample_task,
+        )
+        assert msg.task_id == sample_task.id
+
+    async def test_chat_message_str(self, sample_chat_message):
+        assert "Jane Doe" in str(sample_chat_message)
+        assert "general" in str(sample_chat_message)

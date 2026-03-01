@@ -8,7 +8,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
-from app.models import AgentRun, RunStage, RunStatus, Task, TaskStatus
+from app.models import AgentRun, ChatMessage
 
 
 @pytest.fixture
@@ -159,3 +159,262 @@ class TestIntegrationsEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
+
+    async def test_health_check(self, client):
+        resp = await client.get("/api/v1/integrations/health")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        for entry in data:
+            assert "name" in entry
+            assert "configured" in entry
+            assert "healthy" in entry
+            assert "error" in entry
+
+    async def test_health_check_with_mock(self, client):
+        from app.integrations.base import BaseIntegration
+        from app.integrations.registry import IntegrationRegistry
+
+        class HealthyIntegration(BaseIntegration):
+            name = "test-healthy"
+            description = "Test healthy integration"
+            required_env_vars = []
+
+            async def health_check(self) -> bool:
+                return True
+
+        class UnhealthyIntegration(BaseIntegration):
+            name = "test-unhealthy"
+            description = "Test unhealthy integration"
+            required_env_vars = []
+
+            async def health_check(self) -> bool:
+                return False
+
+        original = IntegrationRegistry._integrations
+        try:
+            IntegrationRegistry._integrations = [
+                HealthyIntegration(),
+                UnhealthyIntegration(),
+            ]
+            resp = await client.get("/api/v1/integrations/health")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert len(data) == 2
+            assert data[0]["healthy"] is True
+            assert data[0]["error"] is None
+            assert data[1]["healthy"] is False
+            assert data[1]["error"] == "Health check returned unhealthy"
+        finally:
+            IntegrationRegistry._integrations = original
+
+    async def test_health_check_exception(self, client):
+        from app.integrations.base import BaseIntegration
+        from app.integrations.registry import IntegrationRegistry
+
+        class ErrorIntegration(BaseIntegration):
+            name = "test-error"
+            description = "Test error integration"
+            required_env_vars = []
+
+            async def health_check(self) -> bool:
+                raise ConnectionError("Cannot connect")
+
+        original = IntegrationRegistry._integrations
+        try:
+            IntegrationRegistry._integrations = [ErrorIntegration()]
+            resp = await client.get("/api/v1/integrations/health")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert len(data) == 1
+            assert data[0]["healthy"] is False
+            assert "Cannot connect" in data[0]["error"]
+        finally:
+            IntegrationRegistry._integrations = original
+
+    async def test_health_check_unconfigured(self, client):
+        from app.integrations.base import BaseIntegration
+        from app.integrations.registry import IntegrationRegistry
+
+        class UnconfiguredIntegration(BaseIntegration):
+            name = "test-unconfigured"
+            description = "Missing env vars"
+            required_env_vars = ["NONEXISTENT_VAR_12345"]
+
+            async def health_check(self) -> bool:
+                return True
+
+        original = IntegrationRegistry._integrations
+        try:
+            IntegrationRegistry._integrations = [UnconfiguredIntegration()]
+            resp = await client.get("/api/v1/integrations/health")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert len(data) == 1
+            assert data[0]["configured"] is False
+            assert data[0]["healthy"] is None
+        finally:
+            IntegrationRegistry._integrations = original
+
+    async def test_health_check_timeout(self, client):
+        import asyncio
+
+        from app.integrations.base import BaseIntegration
+        from app.integrations.registry import IntegrationRegistry
+
+        class SlowIntegration(BaseIntegration):
+            name = "test-slow"
+            description = "Slow integration"
+            required_env_vars = []
+
+            async def health_check(self) -> bool:
+                await asyncio.sleep(20)
+                return True
+
+        original = IntegrationRegistry._integrations
+        try:
+            IntegrationRegistry._integrations = [SlowIntegration()]
+            # Patch the timeout to 0.1s so test doesn't take 10s
+            with patch("app.api.v1.asyncio.wait_for", side_effect=asyncio.TimeoutError):
+                resp = await client.get("/api/v1/integrations/health")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data[0]["healthy"] is False
+            assert "timed out" in data[0]["error"]
+        finally:
+            IntegrationRegistry._integrations = original
+
+
+class TestIntegrationRegistry:
+    def test_initialize_and_get_status(self):
+        from app.integrations.registry import IntegrationRegistry
+
+        original_integrations = IntegrationRegistry._integrations
+        original_active = IntegrationRegistry._active
+        try:
+            IntegrationRegistry._integrations = []
+            IntegrationRegistry._active = []
+            IntegrationRegistry.initialize()
+            status = IntegrationRegistry.get_status()
+            assert isinstance(status, list)
+            assert len(status) > 0
+            for entry in status:
+                assert "name" in entry
+                assert "active" in entry
+        finally:
+            IntegrationRegistry._integrations = original_integrations
+            IntegrationRegistry._active = original_active
+
+    def test_get_all_and_get_active(self):
+        from app.integrations.registry import IntegrationRegistry
+
+        original_integrations = IntegrationRegistry._integrations
+        original_active = IntegrationRegistry._active
+        try:
+            IntegrationRegistry._integrations = []
+            IntegrationRegistry._active = []
+            IntegrationRegistry.initialize()
+            all_integrations = IntegrationRegistry.get_all()
+            active = IntegrationRegistry.get_active()
+            assert isinstance(all_integrations, list)
+            assert isinstance(active, list)
+            assert len(all_integrations) >= len(active)
+        finally:
+            IntegrationRegistry._integrations = original_integrations
+            IntegrationRegistry._active = original_active
+
+    def test_get_by_name(self):
+        from app.integrations.base import BaseIntegration
+        from app.integrations.registry import IntegrationRegistry
+
+        class FakeIntegration(BaseIntegration):
+            name = "fake"
+            description = "Fake"
+            required_env_vars = []
+
+            async def health_check(self) -> bool:
+                return True
+
+        original_integrations = IntegrationRegistry._integrations
+        original_active = IntegrationRegistry._active
+        try:
+            instance = FakeIntegration()
+            IntegrationRegistry._integrations = [instance]
+            IntegrationRegistry._active = [instance]
+            found = IntegrationRegistry.get("fake")
+            assert found is instance
+            assert IntegrationRegistry.get("nonexistent") is None
+        finally:
+            IntegrationRegistry._integrations = original_integrations
+            IntegrationRegistry._active = original_active
+
+    def test_reset(self):
+        from app.integrations.registry import IntegrationRegistry
+
+        original_integrations = IntegrationRegistry._integrations
+        original_active = IntegrationRegistry._active
+        try:
+            IntegrationRegistry.reset()
+            assert IntegrationRegistry._integrations == []
+            assert IntegrationRegistry._active == []
+        finally:
+            IntegrationRegistry._integrations = original_integrations
+            IntegrationRegistry._active = original_active
+
+
+class TestChatEndpoint:
+    async def test_list_messages_empty(self, client):
+        resp = await client.get("/api/v1/chat/messages")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 0
+        assert data["messages"] == []
+        assert data["offset"] == 0
+        assert data["limit"] == 50
+
+    async def test_list_messages(self, client, sample_chat_message):
+        resp = await client.get("/api/v1/chat/messages")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert len(data["messages"]) == 1
+        msg = data["messages"][0]
+        assert msg["channel_id"] == "C123456"
+        assert msg["user_name"] == "Jane Doe"
+        assert msg["message"] == "Hello from Slack!"
+
+    async def test_list_messages_pagination(self, client):
+        for i in range(5):
+            await ChatMessage.create(
+                id=uuid.uuid4(),
+                channel_id="C1",
+                user_id="U1",
+                message=f"Message {i}",
+                slack_ts=f"1.{i}",
+            )
+        resp = await client.get("/api/v1/chat/messages?limit=2&offset=0")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 5
+        assert len(data["messages"]) == 2
+
+    async def test_list_messages_channel_filter(self, client):
+        await ChatMessage.create(
+            id=uuid.uuid4(),
+            channel_id="C_ALPHA",
+            user_id="U1",
+            message="Alpha msg",
+            slack_ts="1.1",
+        )
+        await ChatMessage.create(
+            id=uuid.uuid4(),
+            channel_id="C_BETA",
+            user_id="U1",
+            message="Beta msg",
+            slack_ts="1.2",
+        )
+        resp = await client.get("/api/v1/chat/messages?channel_id=C_ALPHA")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["messages"][0]["channel_id"] == "C_ALPHA"

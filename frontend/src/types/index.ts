@@ -65,3 +65,31 @@ export interface IntegrationStatus {
   active: boolean;
   missing_env_vars: string[];
 }
+
+export interface IntegrationHealth {
+  name: string;
+  description: string;
+  configured: boolean;
+  healthy: boolean | null;
+  error: string | null;
+}
+
+export interface ChatMessage {
+  id: string;
+  channel_id: string;
+  channel_name: string;
+  user_id: string;
+  user_name: string;
+  message: string;
+  slack_ts: string;
+  thread_ts: string | null;
+  task_id: string | null;
+  created_at: string;
+}
+
+export interface ChatMessagesResponse {
+  total: number;
+  offset: number;
+  limit: number;
+  messages: ChatMessage[];
+}

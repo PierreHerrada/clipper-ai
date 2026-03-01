@@ -11,6 +11,7 @@ TORTOISE_ORM = {
                 "app.models.agent_run",
                 "app.models.agent_log",
                 "app.models.conversation",
+                "app.models.chat_message",
             ],
             "default_connection": "default",
         },

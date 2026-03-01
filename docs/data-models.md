@@ -131,6 +131,32 @@ Preserves Slack thread messages for context tracking.
 
 ---
 
+## chat_messages
+
+Persists Slack messages seen by the bot for display in the Chat tab.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | UUID | PK, auto-generated | Unique message identifier |
+| `channel_id` | TEXT | NOT NULL | Slack channel ID |
+| `channel_name` | TEXT | NOT NULL, default '' | Human-readable channel name |
+| `user_id` | TEXT | NOT NULL | Slack user ID |
+| `user_name` | TEXT | NOT NULL, default '' | Human-readable user name |
+| `message` | TEXT | NOT NULL | Message text content |
+| `slack_ts` | TEXT | NOT NULL | Slack message timestamp |
+| `thread_ts` | TEXT | NULLABLE | Parent thread timestamp (null if top-level) |
+| `task_id` | UUID | FK → tasks, NULLABLE, ON DELETE SET NULL | Associated task (if any) |
+| `created_at` | TIMESTAMPTZ | NOT NULL, auto | Record creation time |
+
+### Indexes
+- Primary key on `id`
+- Index on `created_at` (for ordering)
+- Index on `channel_id` (for channel filtering)
+- Index on `slack_ts` (for deduplication)
+- Index on `task_id` (for task association queries)
+
+---
+
 ## Tortoise ORM Configuration
 
 ```python
@@ -145,6 +171,7 @@ TORTOISE_ORM = {
                 "app.models.agent_run",
                 "app.models.agent_log",
                 "app.models.conversation",
+                "app.models.chat_message",
                 "aerich.models",
             ],
             "default_connection": "default",

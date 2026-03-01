@@ -81,3 +81,23 @@ class TestSlackIntegration:
                 message="Test update",
             )
             assert result is None
+
+    async def test_start_listening(self, slack):
+        mock_handler = AsyncMock()
+        mock_handler.start_async = AsyncMock()
+        mock_app = MagicMock()
+        mock_app.event = MagicMock(return_value=lambda f: f)
+
+        with patch.object(slack, "get_app", return_value=mock_app), \
+             patch.object(slack, "get_client", return_value=AsyncMock()), \
+             patch(
+                 "slack_bolt.adapter.socket_mode.async_handler.AsyncSocketModeHandler",
+                 return_value=mock_handler,
+             ):
+            await slack.start_listening()
+            assert slack._listening is True
+
+    async def test_start_listening_idempotent(self, slack):
+        slack._listening = True
+        # Should return immediately without doing anything
+        await slack.start_listening()

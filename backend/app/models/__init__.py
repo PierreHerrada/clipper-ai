@@ -1,5 +1,6 @@
 from app.models.agent_log import AgentLog, LogType
 from app.models.agent_run import AgentRun, RunStage, RunStatus
+from app.models.chat_message import ChatMessage
 from app.models.conversation import Conversation, MessageRole
 from app.models.task import Task, TaskStatus
 
@@ -13,4 +14,5 @@ __all__ = [
     "LogType",
     "Conversation",
     "MessageRole",
+    "ChatMessage",
 ]

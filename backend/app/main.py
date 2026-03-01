@@ -4,7 +4,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from tortoise.contrib.fastapi import register_tortoise
 
-from app.api.v1 import dashboard_router, integrations_router, tasks_router, webhooks_router
+from app.api.v1 import (
+    chat_router,
+    dashboard_router,
+    integrations_router,
+    tasks_router,
+    webhooks_router,
+)
 from app.api.v1.agent import router as agent_router
 from app.config import settings
 from app.db import TORTOISE_ORM
@@ -40,12 +46,25 @@ def create_app() -> FastAPI:
             state = "active" if status["active"] else "inactive"
             logger.info("  Integration: %s — %s", status["name"], state)
 
+        # Start Slack message listener if configured
+        slack = IntegrationRegistry.get("slack")
+        if slack is not None:
+            try:
+                from app.integrations.slack.bot import SlackIntegration
+
+                if isinstance(slack, SlackIntegration):
+                    await slack.start_listening()
+                    logger.info("Slack message listener started")
+            except Exception:
+                logger.exception("Failed to start Slack listener")
+
     # Register routers
     app.include_router(tasks_router)
     app.include_router(dashboard_router)
     app.include_router(webhooks_router)
     app.include_router(integrations_router)
     app.include_router(agent_router)
+    app.include_router(chat_router)
 
     @app.get("/health")
     async def health() -> dict:
