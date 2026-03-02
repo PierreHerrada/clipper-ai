@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { triggerStage } from "../api/tasks";
+import { retryTask, triggerStage } from "../api/tasks";
 import type { Task } from "../types";
 
 interface StageControlsProps {
@@ -22,10 +22,31 @@ export default function StageControls({ task, onRefresh }: StageControlsProps) {
     }
   };
 
+  const handleRetry = async () => {
+    setLoading("retry");
+    try {
+      await retryTask(task.id);
+      onRefresh();
+    } catch {
+      // Error handling could be improved
+    } finally {
+      setLoading(null);
+    }
+  };
+
   const isRunning = task.latest_run?.status === "running";
 
   return (
     <div className="flex gap-2">
+      {task.status === "failed" && (
+        <button
+          onClick={handleRetry}
+          disabled={loading !== null}
+          className="text-xs px-3 py-1 rounded bg-coral/20 text-coral hover:bg-coral/30 disabled:opacity-50"
+        >
+          {loading === "retry" ? "Retrying..." : "Retry"}
+        </button>
+      )}
       {task.status === "backlog" && (
         <button
           onClick={() => handleTrigger("plan")}

@@ -38,3 +38,11 @@ export async function triggerStage(
   if (!resp.ok) throw new Error(`Failed to trigger ${stage}`);
   return resp.json();
 }
+
+export async function retryTask(id: string): Promise<Task> {
+  const resp = await apiFetch(`${BASE}/tasks/${id}/retry`, {
+    method: "POST",
+  });
+  if (!resp.ok) throw new Error("Failed to retry task");
+  return resp.json();
+}
