@@ -202,6 +202,31 @@ Stores internal application logs from integrations for debugging.
 
 ---
 
+## repositories
+
+Stores GitHub repositories and their enabled/disabled status for agent gating.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | UUID | PK, auto-generated | Unique repository identifier |
+| `full_name` | VARCHAR(255) | NOT NULL, UNIQUE | Full repo name (e.g., org/repo-name) |
+| `name` | VARCHAR(255) | NOT NULL | Short repo name |
+| `description` | TEXT | NOT NULL, default '' | Repository description |
+| `private` | BOOLEAN | NOT NULL, default false | Whether the repo is private |
+| `enabled` | BOOLEAN | NOT NULL, default false | Whether the agent can operate on this repo |
+| `default_branch` | VARCHAR(100) | NOT NULL, default 'main' | Default branch name |
+| `github_url` | TEXT | NOT NULL, default '' | GitHub URL |
+| `last_synced_at` | TIMESTAMPTZ | NULLABLE | Last sync from GitHub |
+| `created_at` | TIMESTAMPTZ | NOT NULL, auto | Record creation time |
+| `updated_at` | TIMESTAMPTZ | NOT NULL, auto-update | Last modification time |
+
+### Indexes
+- Primary key on `id`
+- Unique index on `full_name` (for upsert lookups)
+- Index on `enabled` (for agent gating queries)
+
+---
+
 ## settings
 
 Stores application-level configuration as key-value pairs.
@@ -237,6 +262,7 @@ TORTOISE_ORM = {
                 "app.models.datadog_analysis",
                 "app.models.internal_log",
                 "app.models.setting",
+                "app.models.repository",
                 "aerich.models",
             ],
             "default_connection": "default",

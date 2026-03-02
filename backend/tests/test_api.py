@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import uuid
 from decimal import Decimal
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
-from app.models import AgentRun, ChatMessage
+from app.models import AgentRun, ChatMessage, Repository
 
 
 @pytest.fixture
@@ -515,3 +515,139 @@ class TestChatEndpoint:
         data = resp.json()
         assert data["total"] == 1
         assert data["messages"][0]["channel_id"] == "C_ALPHA"
+
+
+class TestRepositoriesEndpoints:
+    async def test_list_empty(self, client, auth_headers):
+        resp = await client.get("/api/v1/repositories", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    async def test_list_after_create(self, client, auth_headers):
+        await Repository.create(
+            id=uuid.uuid4(),
+            full_name="org/repo-1",
+            name="repo-1",
+            description="First repo",
+        )
+        resp = await client.get("/api/v1/repositories", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["full_name"] == "org/repo-1"
+        assert data[0]["enabled"] is False
+
+    async def test_sync_without_github(self, client, auth_headers):
+        """Sync should 503 when GitHub is not configured."""
+        with patch(
+            "app.integrations.registry.IntegrationRegistry.get",
+            return_value=None,
+        ):
+            resp = await client.post("/api/v1/repositories/sync", headers=auth_headers)
+            assert resp.status_code == 503
+
+    async def test_sync_with_mock(self, client, auth_headers):
+        from app.integrations.github.client import GitHubIntegration
+
+        mock_github = MagicMock(spec=GitHubIntegration)
+        mock_github.list_org_repos.return_value = [
+            {
+                "full_name": "org/repo-a",
+                "name": "repo-a",
+                "description": "Repo A",
+                "private": False,
+                "default_branch": "main",
+                "github_url": "https://github.com/org/repo-a",
+            },
+            {
+                "full_name": "org/repo-b",
+                "name": "repo-b",
+                "description": "Repo B",
+                "private": True,
+                "default_branch": "develop",
+                "github_url": "https://github.com/org/repo-b",
+            },
+        ]
+
+        with patch(
+            "app.integrations.registry.IntegrationRegistry.get",
+            return_value=mock_github,
+        ):
+            resp = await client.post("/api/v1/repositories/sync", headers=auth_headers)
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["created"] == 2
+            assert data["updated"] == 0
+            assert data["total"] == 2
+
+        # Verify repos in DB
+        repos = await Repository.all()
+        assert len(repos) == 2
+
+    async def test_sync_updates_existing(self, client, auth_headers):
+        """Second sync should update, not duplicate."""
+        from app.integrations.github.client import GitHubIntegration
+
+        await Repository.create(
+            id=uuid.uuid4(),
+            full_name="org/existing",
+            name="existing",
+            description="Old description",
+        )
+
+        mock_github = MagicMock(spec=GitHubIntegration)
+        mock_github.list_org_repos.return_value = [
+            {
+                "full_name": "org/existing",
+                "name": "existing",
+                "description": "New description",
+                "private": False,
+                "default_branch": "main",
+                "github_url": "https://github.com/org/existing",
+            },
+        ]
+
+        with patch(
+            "app.integrations.registry.IntegrationRegistry.get",
+            return_value=mock_github,
+        ):
+            resp = await client.post("/api/v1/repositories/sync", headers=auth_headers)
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["created"] == 0
+            assert data["updated"] == 1
+
+        repo = await Repository.get(full_name="org/existing")
+        assert repo.description == "New description"
+
+    async def test_toggle(self, client, auth_headers):
+        repo = await Repository.create(
+            id=uuid.uuid4(),
+            full_name="org/toggle-repo",
+            name="toggle-repo",
+            enabled=False,
+        )
+        resp = await client.patch(
+            f"/api/v1/repositories/{repo.id}",
+            json={"enabled": True},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["enabled"] is True
+
+        # Verify DB
+        refreshed = await Repository.get(id=repo.id)
+        assert refreshed.enabled is True
+
+    async def test_toggle_not_found(self, client, auth_headers):
+        fake_id = str(uuid.uuid4())
+        resp = await client.patch(
+            f"/api/v1/repositories/{fake_id}",
+            json={"enabled": True},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_repositories_require_auth(self, client):
+        resp = await client.get("/api/v1/repositories")
+        assert resp.status_code in (401, 403)

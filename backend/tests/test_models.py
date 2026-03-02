@@ -10,6 +10,7 @@ from app.models import (
     Conversation,
     LogType,
     MessageRole,
+    Repository,
     RunStage,
     RunStatus,
     Setting,
@@ -230,6 +231,83 @@ class TestChatMessage:
     async def test_chat_message_str(self, sample_chat_message):
         assert "Jane Doe" in str(sample_chat_message)
         assert "general" in str(sample_chat_message)
+
+
+class TestRepository:
+    async def test_create_repository(self):
+        repo = await Repository.create(
+            id=uuid.uuid4(),
+            full_name="org/test-repo",
+            name="test-repo",
+            description="A test repository",
+            private=False,
+            enabled=False,
+            default_branch="main",
+            github_url="https://github.com/org/test-repo",
+        )
+        assert repo.full_name == "org/test-repo"
+        assert repo.name == "test-repo"
+        assert repo.description == "A test repository"
+        assert repo.private is False
+        assert repo.enabled is False
+        assert repo.default_branch == "main"
+        assert repo.created_at is not None
+
+    async def test_repository_unique_full_name(self):
+        await Repository.create(
+            id=uuid.uuid4(),
+            full_name="org/unique-repo",
+            name="unique-repo",
+        )
+        with pytest.raises(Exception):
+            await Repository.create(
+                id=uuid.uuid4(),
+                full_name="org/unique-repo",
+                name="unique-repo",
+            )
+
+    async def test_repository_default_values(self):
+        repo = await Repository.create(
+            id=uuid.uuid4(),
+            full_name="org/defaults-repo",
+            name="defaults-repo",
+        )
+        assert repo.description == ""
+        assert repo.private is False
+        assert repo.enabled is False
+        assert repo.default_branch == "main"
+        assert repo.github_url == ""
+        assert repo.last_synced_at is None
+
+    async def test_repository_update(self):
+        repo = await Repository.create(
+            id=uuid.uuid4(),
+            full_name="org/update-repo",
+            name="update-repo",
+            enabled=False,
+        )
+        repo.enabled = True
+        await repo.save()
+        refreshed = await Repository.get(id=repo.id)
+        assert refreshed.enabled is True
+
+    async def test_repository_str(self):
+        repo = await Repository.create(
+            id=uuid.uuid4(),
+            full_name="org/str-repo",
+            name="str-repo",
+            enabled=True,
+        )
+        assert "org/str-repo" in str(repo)
+        assert "enabled" in str(repo)
+
+        repo2 = await Repository.create(
+            id=uuid.uuid4(),
+            full_name="org/str-repo-2",
+            name="str-repo-2",
+            enabled=False,
+        )
+        assert "disabled" in str(repo2)
 
 
 class TestSetting:

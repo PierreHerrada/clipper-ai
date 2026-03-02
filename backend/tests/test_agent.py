@@ -11,13 +11,14 @@ from app.agent.prompts import build_plan_prompt, build_review_prompt, build_work
 from app.agent.runner import (
     _active_processes,
     _get_base_prompt,
+    _get_enabled_repos,
     _notify_run_complete,
     _stopped_runs,
     run_agent,
     save_log,
     stop_run,
 )
-from app.models import AgentLog, AgentRun, LogType, RunStage, RunStatus, Setting, Task, TaskStatus
+from app.models import AgentLog, AgentRun, LogType, Repository, RunStage, RunStatus, Setting, Task, TaskStatus
 from app.websocket.manager import ConnectionManager
 
 
@@ -453,3 +454,105 @@ class TestStopRun:
         # Verify the "Stopped by user" log was saved
         logs = await AgentLog.filter(run_id=run.id, type=LogType.ERROR).all()
         assert any("Stopped by user" in log.content.get("message", "") for log in logs)
+
+
+class TestRepoValidationGate:
+    async def test_rejects_disabled_repo(self, sample_task):
+        """Agent should fail if task targets a repo that isn't enabled."""
+        sample_task.repo = "org/disabled-repo"
+        await sample_task.save()
+
+        # Create an enabled repo (different from task's repo)
+        await Repository.create(
+            id=uuid.uuid4(),
+            full_name="org/enabled-repo",
+            name="enabled-repo",
+            enabled=True,
+        )
+
+        run = await run_agent(sample_task, RunStage.PLAN)
+        assert run.status == RunStatus.FAILED
+
+        task = await Task.get(id=sample_task.id)
+        assert task.status == TaskStatus.FAILED
+
+        logs = await AgentLog.filter(run_id=run.id, type=LogType.ERROR).all()
+        assert any("not enabled" in log.content.get("message", "") for log in logs)
+
+    async def test_allows_enabled_repo(self, sample_task):
+        """Agent should proceed if task targets an enabled repo."""
+        sample_task.repo = "org/good-repo"
+        await sample_task.save()
+
+        await Repository.create(
+            id=uuid.uuid4(),
+            full_name="org/good-repo",
+            name="good-repo",
+            enabled=True,
+        )
+
+        mock_process = AsyncMock()
+        mock_process.stdout = AsyncIteratorMock([])
+        mock_process.stderr = AsyncMock()
+        mock_process.stderr.read = AsyncMock(return_value=b"")
+        mock_process.wait = AsyncMock(return_value=None)
+        mock_process.returncode = 0
+
+        with patch("asyncio.create_subprocess_exec", return_value=mock_process):
+            run = await run_agent(sample_task, RunStage.PLAN)
+            assert run.status == RunStatus.DONE
+
+    async def test_allows_when_no_repos_configured(self, sample_task):
+        """Agent should allow all repos when no repos are enabled (feature unconfigured)."""
+        sample_task.repo = "org/any-repo"
+        await sample_task.save()
+
+        # No repositories in DB at all
+        mock_process = AsyncMock()
+        mock_process.stdout = AsyncIteratorMock([])
+        mock_process.stderr = AsyncMock()
+        mock_process.stderr.read = AsyncMock(return_value=b"")
+        mock_process.wait = AsyncMock(return_value=None)
+        mock_process.returncode = 0
+
+        with patch("asyncio.create_subprocess_exec", return_value=mock_process):
+            run = await run_agent(sample_task, RunStage.PLAN)
+            assert run.status == RunStatus.DONE
+
+    async def test_allows_when_task_has_no_repo(self, sample_task):
+        """Agent should proceed if task has no repo set, even if repos are configured."""
+        assert sample_task.repo is None
+
+        await Repository.create(
+            id=uuid.uuid4(),
+            full_name="org/some-repo",
+            name="some-repo",
+            enabled=True,
+        )
+
+        mock_process = AsyncMock()
+        mock_process.stdout = AsyncIteratorMock([])
+        mock_process.stderr = AsyncMock()
+        mock_process.stderr.read = AsyncMock(return_value=b"")
+        mock_process.wait = AsyncMock(return_value=None)
+        mock_process.returncode = 0
+
+        with patch("asyncio.create_subprocess_exec", return_value=mock_process):
+            run = await run_agent(sample_task, RunStage.PLAN)
+            assert run.status == RunStatus.DONE
+
+
+class TestGetEnabledRepos:
+    async def test_returns_empty_set_when_none(self):
+        result = await _get_enabled_repos()
+        assert result == set()
+
+    async def test_returns_enabled_repos(self):
+        await Repository.create(
+            id=uuid.uuid4(), full_name="org/enabled", name="enabled", enabled=True
+        )
+        await Repository.create(
+            id=uuid.uuid4(), full_name="org/disabled", name="disabled", enabled=False
+        )
+        result = await _get_enabled_repos()
+        assert result == {"org/enabled"}

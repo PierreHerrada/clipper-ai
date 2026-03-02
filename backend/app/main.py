@@ -12,6 +12,7 @@ from app.api.v1 import (
     integrations_router,
     jira_router,
     logs_router,
+    repositories_router,
     settings_router,
     tasks_router,
     webhooks_router,
@@ -122,6 +123,7 @@ def create_app() -> FastAPI:
     app.include_router(jira_router, dependencies=auth_dep)
     app.include_router(logs_router, dependencies=auth_dep)
     app.include_router(settings_router, dependencies=auth_dep)
+    app.include_router(repositories_router, dependencies=auth_dep)
 
     # WebSocket router — auth handled inside the handler
     app.include_router(agent_router)

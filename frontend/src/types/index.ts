@@ -140,3 +140,23 @@ export interface SettingResponse {
   value: string;
   updated_at: string | null;
 }
+
+export interface Repository {
+  id: string;
+  full_name: string;
+  name: string;
+  description: string;
+  private: boolean;
+  enabled: boolean;
+  default_branch: string;
+  github_url: string;
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SyncResult {
+  created: number;
+  updated: number;
+  total: number;
+}

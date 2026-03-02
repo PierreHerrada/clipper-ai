@@ -54,6 +54,14 @@ async def update_run_cost(
     )
 
 
+async def _get_enabled_repos() -> set[str]:
+    """Return set of full_name strings for enabled repos, or empty set if none configured."""
+    from app.models.repository import Repository
+
+    repos = await Repository.filter(enabled=True).all()
+    return {r.full_name for r in repos}
+
+
 async def _get_base_prompt() -> str:
     """Fetch the base prompt from settings, returning empty string if not set."""
     from app.models.setting import Setting
@@ -168,6 +176,28 @@ async def run_agent(
     existing_run: Optional[AgentRun] = None,
 ) -> AgentRun:
     """Execute Claude Code CLI for a given task and stage."""
+    # Gate: reject if task targets a repo that isn't enabled
+    if task.repo:
+        enabled_repos = await _get_enabled_repos()
+        if enabled_repos and task.repo not in enabled_repos:
+            run = existing_run or await AgentRun.create(
+                id=uuid.uuid4(),
+                task=task,
+                stage=stage,
+                status=RunStatus.RUNNING,
+            )
+            await AgentRun.filter(id=run.id).update(
+                status=RunStatus.FAILED,
+                finished_at=datetime.now(timezone.utc),
+            )
+            await Task.filter(id=task.id).update(status=TaskStatus.FAILED)
+            msg = (
+                f"Repository '{task.repo}' is not enabled. "
+                "Enable it in Settings > Repositories."
+            )
+            await save_log(run.id, {"message": msg}, LogType.ERROR)
+            return await AgentRun.get(id=run.id)
+
     if existing_run is not None:
         run = existing_run
     else:

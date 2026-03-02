@@ -485,6 +485,67 @@ Returns paginated internal logs from integrations (Jira sync, Slack bot, etc.).
 
 ---
 
+### Repositories
+
+#### `GET /api/v1/repositories`
+
+Returns all repositories from the database, ordered by `full_name`.
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "id": "uuid",
+    "full_name": "org/repo-name",
+    "name": "repo-name",
+    "description": "string",
+    "private": false,
+    "enabled": false,
+    "default_branch": "main",
+    "github_url": "https://github.com/org/repo-name",
+    "last_synced_at": "ISO 8601|null",
+    "created_at": "ISO 8601",
+    "updated_at": "ISO 8601"
+  }
+]
+```
+
+#### `POST /api/v1/repositories/sync`
+
+Fetches all repos from the configured GitHub org and upserts them into the database. New repos are created with `enabled=false`.
+
+**Response:** `200 OK`
+```json
+{
+  "created": 3,
+  "updated": 5,
+  "total": 8
+}
+```
+
+**Error:** `503 Service Unavailable`
+```json
+{"detail": "GitHub integration not configured"}
+```
+
+#### `PATCH /api/v1/repositories/{id}`
+
+Toggle a repository's `enabled` status.
+
+**Request Body:**
+```json
+{"enabled": true}
+```
+
+**Response:** `200 OK` — Updated repository object (same shape as GET list item)
+
+**Error:** `404 Not Found`
+```json
+{"detail": "Repository not found"}
+```
+
+---
+
 ### Settings
 
 #### `GET /api/v1/settings/{key}`
@@ -687,5 +748,25 @@ interface SettingResponse {
   key: string;
   value: string;
   updated_at: string | null;
+}
+
+interface Repository {
+  id: string;
+  full_name: string;
+  name: string;
+  description: string;
+  private: boolean;
+  enabled: boolean;
+  default_branch: string;
+  github_url: string;
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface SyncResult {
+  created: number;
+  updated: number;
+  total: number;
 }
 ```

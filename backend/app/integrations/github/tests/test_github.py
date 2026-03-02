@@ -74,3 +74,38 @@ class TestGitHubIntegration:
                 head="feature/swe-123",
                 base="main",
             )
+
+    def test_list_org_repos(self, github_integration):
+        mock_repo1 = MagicMock()
+        mock_repo1.full_name = "test-org/repo-1"
+        mock_repo1.name = "repo-1"
+        mock_repo1.description = "First repo"
+        mock_repo1.private = False
+        mock_repo1.default_branch = "main"
+        mock_repo1.html_url = "https://github.com/test-org/repo-1"
+
+        mock_repo2 = MagicMock()
+        mock_repo2.full_name = "test-org/repo-2"
+        mock_repo2.name = "repo-2"
+        mock_repo2.description = None
+        mock_repo2.private = True
+        mock_repo2.default_branch = "develop"
+        mock_repo2.html_url = "https://github.com/test-org/repo-2"
+
+        mock_org = MagicMock()
+        mock_org.get_repos.return_value = [mock_repo1, mock_repo2]
+
+        mock_gh = MagicMock()
+        mock_gh.get_organization.return_value = mock_org
+
+        with patch.object(github_integration, "_get_client", return_value=mock_gh):
+            repos = github_integration.list_org_repos()
+            assert len(repos) == 2
+            assert repos[0]["full_name"] == "test-org/repo-1"
+            assert repos[0]["description"] == "First repo"
+            assert repos[0]["private"] is False
+            assert repos[1]["full_name"] == "test-org/repo-2"
+            assert repos[1]["description"] == ""
+            assert repos[1]["private"] is True
+            assert repos[1]["default_branch"] == "develop"
+            mock_org.get_repos.assert_called_once_with(sort="name")

@@ -25,6 +25,24 @@ class GitHubIntegration(BaseIntegration):
             logger.exception("GitHub health check failed")
             return False
 
+    def list_org_repos(self) -> list[dict]:
+        """Fetch all repos from the configured GitHub org."""
+        gh = self._get_client()
+        org = gh.get_organization(settings.github_org)
+        repos = []
+        for repo in org.get_repos(sort="name"):
+            repos.append(
+                {
+                    "full_name": repo.full_name,
+                    "name": repo.name,
+                    "description": repo.description or "",
+                    "private": repo.private,
+                    "default_branch": repo.default_branch or "main",
+                    "github_url": repo.html_url,
+                }
+            )
+        return repos
+
     async def create_pr(
         self,
         repo_name: str,
