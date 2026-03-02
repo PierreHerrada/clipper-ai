@@ -348,6 +348,7 @@
       <a href="#slack-setup">Slack</a>
       <a href="#jira-setup">Jira</a>
       <a href="#github-setup">GitHub</a>
+      <a href="#datadog-setup">Datadog</a>
     </div>
     <div class="sidebar-section">
       <h4>Development</h4>
@@ -355,6 +356,13 @@
       <a href="#backend-dev">Backend</a>
       <a href="#frontend-dev">Frontend</a>
       <a href="#testing">Testing</a>
+    </div>
+    <div class="sidebar-section">
+      <h4>Features</h4>
+      <a href="#agent-controls">Agent Controls</a>
+      <a href="#settings">Settings &amp; Base Prompt</a>
+      <a href="#status-page">Status Page</a>
+      <a href="#chat-tab">Chat Tab</a>
     </div>
     <div class="sidebar-section">
       <h4>Architecture</h4>
@@ -435,6 +443,9 @@
         <tr><td><code>JIRA_PROJECT_KEY</code></td><td>Jira project key (e.g. <code>SWE</code>)</td><td>For Jira</td></tr>
         <tr><td><code>GITHUB_TOKEN</code></td><td>GitHub personal access token</td><td>For GitHub</td></tr>
         <tr><td><code>GITHUB_ORG</code></td><td>GitHub organisation name</td><td>For GitHub</td></tr>
+        <tr><td><code>DD_API_KEY</code></td><td>Datadog API key</td><td>For Datadog</td></tr>
+        <tr><td><code>DD_APP_KEY</code></td><td>Datadog application key</td><td>For Datadog</td></tr>
+        <tr><td><code>DD_SITE</code></td><td>Datadog site (e.g. <code>datadoghq.com</code>, <code>datadoghq.eu</code>)</td><td>For Datadog</td></tr>
       </tbody>
     </table>
 
@@ -457,6 +468,14 @@
     <ol>
       <li>Create a <a href="https://github.com/settings/tokens" target="_blank">personal access token</a> with the <code>repo</code> scope</li>
       <li>Set <code>GITHUB_TOKEN</code> and <code>GITHUB_ORG</code> in your <code>.env</code></li>
+    </ol>
+
+    <h2 id="datadog-setup">Datadog Setup</h2>
+    <ol>
+      <li>Generate an API key and application key from <a href="https://app.datadoghq.com/organization-settings/api-keys" target="_blank">Datadog &gt; Organization Settings</a></li>
+      <li>Set <code>DD_API_KEY</code>, <code>DD_APP_KEY</code>, and <code>DD_SITE</code> in your <code>.env</code></li>
+      <li><strong>Webhook alerts (optional):</strong> In Datadog, create a Monitor webhook pointing to <code>https://&lt;your-host&gt;/api/v1/webhooks/datadog</code>. Incoming alerts are automatically analysed by Claude.</li>
+      <li>Manual analysis is also available from the Datadog tab in the web UI &mdash; paste a URL, query, or trace ID.</li>
     </ol>
 
     <!-- ── Development ──────────────────────────────── -->
@@ -525,6 +544,31 @@
       <strong>Never call real external APIs in tests.</strong> Always mock Slack, Jira, GitHub, and Anthropic calls. The CI pipeline enforces this.
     </div>
 
+    <!-- ── Features ──────────────────────────────────── -->
+    <h2 id="agent-controls">Agent Controls</h2>
+    <p>
+      The board UI provides full lifecycle controls for every task:
+    </p>
+    <ul>
+      <li><strong>Stop Agent</strong> &mdash; Terminate a running agent mid-execution. The backend maintains a process registry so any active Claude Code subprocess can be stopped instantly via <code>POST /api/v1/tasks/{id}/stop</code>.</li>
+      <li><strong>Retry Failed Tasks</strong> &mdash; Click the Retry button on any failed task. The endpoint (<code>POST /api/v1/tasks/{id}/retry</code>) queries the linked Jira ticket to determine the correct status to reset to, keeping both systems in sync.</li>
+    </ul>
+
+    <h2 id="settings">Settings &amp; Base Prompt</h2>
+    <p>
+      The Settings page (<code>/settings</code> in the web UI) lets you configure a <strong>base prompt</strong> that is prepended to every Claude Code agent invocation. Use it to inject repo-specific coding conventions, review guidelines, or preferred libraries. Settings are stored in the database via the <code>GET/PUT /api/v1/settings/{key}</code> endpoints.
+    </p>
+
+    <h2 id="status-page">Status Page</h2>
+    <p>
+      The Status page performs real-time health checks against every configured integration (Slack, Jira, GitHub, Datadog). Each integration reports <strong>configured</strong>, <strong>healthy</strong>, and any error details. Unconfigured integrations are shown as inactive. Data comes from <code>GET /api/v1/integrations/health</code>.
+    </p>
+
+    <h2 id="chat-tab">Chat Tab</h2>
+    <p>
+      The Chat tab displays Slack messages captured by the bot. Only <code>@Corsair</code> mentions and their thread replies are persisted &mdash; general channel chatter is filtered out. Messages are stored in the <code>chat_messages</code> table and served via <code>GET /api/v1/chat/messages</code> with pagination and channel filtering.
+    </p>
+
     <!-- ── Architecture ─────────────────────────────── -->
     <h2 id="architecture">Architecture Overview</h2>
     <p>
@@ -556,9 +600,10 @@
       Integrations live in <code>backend/app/integrations/</code>, each in its own directory. Built-in integrations:
     </p>
     <ul>
-      <li><strong>Slack</strong> — Socket Mode bot that listens for <code>@Corsair</code> mentions and creates tasks</li>
-      <li><strong>Jira</strong> — Creates and updates Jira tickets for each task</li>
+      <li><strong>Slack</strong> — Socket Mode bot that listens for <code>@Corsair</code> mentions and creates tasks. Persists @mentions and thread replies to the Chat tab.</li>
+      <li><strong>Jira</strong> — Bidirectional sync: creates Jira tickets from Slack and pulls status changes back via a background sync process. Board status and Jira stay in lockstep.</li>
       <li><strong>GitHub</strong> — Opens pull requests with branch management and Jira linking</li>
+      <li><strong>Datadog</strong> — Receives Monitor webhook alerts and supports manual analysis. Fetches logs and traces from the Datadog API and summarises them with Claude.</li>
     </ul>
     <p>
       To add a new integration, create a new directory under <code>backend/app/integrations/</code> and follow the patterns in <a href="https://github.com/PierreHerrada/clipper-ai/blob/main/INTEGRATIONS.md">INTEGRATIONS.md</a>.

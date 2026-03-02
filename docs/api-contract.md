@@ -116,6 +116,14 @@ Update task status.
 
 **Error:** `404 Not Found`, `422 Unprocessable Entity`
 
+#### `POST /api/v1/tasks/{id}/retry`
+
+Retry a failed task by resetting its status. If the task has a linked Jira ticket, the endpoint fetches the current Jira status and maps it to the appropriate board status. Otherwise defaults to `backlog`.
+
+**Response:** `200 OK` — Updated task object (same shape as GET)
+
+**Error:** `404 Not Found`, `409 Conflict` (task is not in `failed` status)
+
 #### `POST /api/v1/tasks/{id}/stop`
 
 Stop a running agent for a task. Terminates the subprocess.
@@ -123,6 +131,38 @@ Stop a running agent for a task. Terminates the subprocess.
 **Response:** `200 OK` — The active run object (same shape as AgentRun)
 
 **Error:** `404 Not Found` (task not found), `409 Conflict` (no active run)
+
+#### `GET /api/v1/tasks/{id}/runs`
+
+Returns all agent runs for a task, including their logs, ordered by `started_at` descending.
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "id": "uuid",
+    "task_id": "uuid",
+    "stage": "plan|work|review",
+    "status": "running|done|failed",
+    "tokens_in": 0,
+    "tokens_out": 0,
+    "cost_usd": 0.000000,
+    "started_at": "ISO 8601",
+    "finished_at": "ISO 8601|null",
+    "logs": [
+      {
+        "id": "uuid",
+        "run_id": "uuid",
+        "type": "text|tool_use|tool_result|error",
+        "content": {},
+        "created_at": "ISO 8601"
+      }
+    ]
+  }
+]
+```
+
+**Error:** `404 Not Found`
 
 #### `POST /api/v1/tasks/{id}/plan`
 

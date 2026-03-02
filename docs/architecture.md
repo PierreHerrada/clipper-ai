@@ -20,10 +20,10 @@ Corsair is a single Docker image that bundles a FastAPI backend, a React fronten
 │    supervisord (process manager)                           │
 └────────────────────────────────────────────────────────────┘
          │              │              │
-    ┌────┴────┐    ┌───┴───┐    ┌────┴────┐
-    │PostgreSQL│    │ Slack │    │ GitHub  │
-    │  (RDS)   │    │  API  │    │  API    │
-    └─────────┘    └───────┘    └─────────┘
+    ┌────┴────┐    ┌───┴───┐    ┌────┴────┐    ┌─────────┐
+    │PostgreSQL│    │ Slack │    │ GitHub  │    │ Datadog │
+    │  (RDS)   │    │  API  │    │  API    │    │  API    │
+    └─────────┘    └───────┘    └─────────┘    └─────────┘
          │
     ┌────┴────┐
     │  Jira   │
@@ -50,8 +50,8 @@ Corsair is a single Docker image that bundles a FastAPI backend, a React fronten
 
 | Component | Path | Responsibility |
 |---|---|---|
-| **Pages** | `pages/` | Board (Kanban), Dashboard (stats/costs), Login |
-| **Components** | `components/` | TaskCard, TaskBoard, AgentLogViewer, CostWidget, PRBadge, StageControls |
+| **Pages** | `pages/` | Board (Kanban), Dashboard (stats/costs), Login, Settings, Status, Chat |
+| **Components** | `components/` | TaskCard, TaskBoard, AgentLogViewer, CostWidget, PRBadge, StageControls, StopButton, RetryButton |
 | **API Layer** | `api/` | Typed fetch wrappers for all REST endpoints |
 | **Hooks** | `hooks/` | useTasks, useDashboard, useWebSocket |
 | **Types** | `types/` | TypeScript types matching the API contract |
@@ -156,6 +156,10 @@ class BaseIntegration(ABC):
 | `agent_runs` | Each agent execution (plan/work/review) with token usage and cost |
 | `agent_logs` | Individual log lines from Claude Code subprocess |
 | `conversations` | Slack thread messages for context preservation |
+| `chat_messages` | Slack @mentions and thread replies for the Chat tab |
+| `datadog_analyses` | Datadog log/trace analysis results (webhook and manual) |
+| `internal_logs` | Internal application logs from integrations |
+| `settings` | Application-level key-value configuration (e.g. base prompt) |
 
 See `docs/data-models.md` for full schema.
 

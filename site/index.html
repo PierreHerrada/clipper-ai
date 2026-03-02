@@ -549,7 +549,28 @@
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
         </div>
         <h3>Plugin Architecture</h3>
-        <p>Extensible integration system. Slack, Jira, and GitHub ship built-in. Add Linear, GitLab, or your own integrations without touching core code.</p>
+        <p>Extensible integration system. Slack, Jira, GitHub, and Datadog ship built-in. Add Linear, GitLab, or your own integrations without touching core code.</p>
+      </div>
+      <div class="feature-card fade-up fade-up-d1">
+        <div class="feature-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <h3>Datadog Integration</h3>
+        <p>Receive Datadog Monitor alerts via webhook and analyse logs and traces automatically with Claude. Manual analysis mode for on-demand debugging.</p>
+      </div>
+      <div class="feature-card fade-up fade-up-d2">
+        <div class="feature-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <h3>Agent Controls</h3>
+        <p>Stop running agents mid-execution, retry failed tasks with automatic Jira status sync, and customise agent behaviour with a configurable base prompt.</p>
+      </div>
+      <div class="feature-card fade-up fade-up-d3">
+        <div class="feature-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        </div>
+        <h3>Status &amp; Chat</h3>
+        <p>Health-check dashboard for every integration. Built-in Chat tab persists Slack @mentions and thread replies for full context without leaving the UI.</p>
       </div>
     </div>
   </div>
@@ -628,6 +649,7 @@
         <div class="arch-box arch-ext">Slack</div>
         <div class="arch-box arch-ext">Jira</div>
         <div class="arch-box arch-ext">GitHub</div>
+        <div class="arch-box arch-ext">Datadog</div>
       </div>
       <div class="arch-arrow">&#8595;</div>
       <div class="arch-row">
@@ -681,6 +703,7 @@
         <div class="tech-item"><span class="tech-dot dot-blue"></span>Slack (Socket Mode)</div>
         <div class="tech-item"><span class="tech-dot dot-blue"></span>Jira (REST API)</div>
         <div class="tech-item"><span class="tech-dot dot-blue"></span>GitHub (PyGithub)</div>
+        <div class="tech-item"><span class="tech-dot dot-blue"></span>Datadog (Logs &amp; Traces API)</div>
         <div class="tech-item"><span class="tech-dot dot-blue"></span>Claude Code (subprocess)</div>
       </div>
       <div class="tech-col">
