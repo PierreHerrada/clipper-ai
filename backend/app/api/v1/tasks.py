@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -9,6 +10,8 @@ from pydantic import BaseModel
 from app.agent.runner import run_agent
 from app.models import AgentRun, RunStage, RunStatus, Task, TaskStatus
 from app.websocket.manager import ws_manager
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 
@@ -101,6 +104,40 @@ async def _run_agent_background(task: Task, stage: RunStage, placeholder_run: Ag
     # Delete the placeholder run since run_agent creates its own
     await AgentRun.filter(id=placeholder_run.id).delete()
     await run_agent(task, stage, ws_broadcast=ws_manager.broadcast)
+
+
+@router.post("/{task_id}/retry", status_code=200)
+async def retry_task(task_id: str) -> dict:
+    """Retry a failed task by resetting its status based on its Jira issue status."""
+    task = await Task.filter(id=task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.status != TaskStatus.FAILED:
+        raise HTTPException(status_code=409, detail="Task is not in failed status")
+
+    new_status = TaskStatus.BACKLOG  # default fallback
+
+    if task.jira_key:
+        try:
+            from app.integrations.jira.client import JiraIntegration
+            from app.integrations.jira.sync import _map_jira_status
+            from app.integrations.registry import IntegrationRegistry
+
+            jira = IntegrationRegistry.get("jira")
+            if jira is not None and isinstance(jira, JiraIntegration):
+                issue = await jira.get_issue(task.jira_key)
+                jira_status_name = issue.get("fields", {}).get("status", {}).get("name", "")
+                new_status = _map_jira_status(jira_status_name)
+                logger.info(
+                    "Retry task %s: Jira %s status '%s' → %s",
+                    task.id, task.jira_key, jira_status_name, new_status.value,
+                )
+        except Exception:
+            logger.exception("Retry task %s: failed to fetch Jira status, defaulting to backlog", task.id)
+
+    task.status = new_status
+    await task.save()
+    return await _task_to_dict(task)
 
 
 @router.post("/{task_id}/plan", status_code=201)
