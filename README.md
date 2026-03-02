@@ -108,7 +108,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/PierreHerrada/clipper-ai.git
+git clone https://github.com/PierreHerrada/corsair.git
 cd clipper-ai
 
 # Copy and configure environment variables
