@@ -49,6 +49,19 @@ async def save_log(
     )
 
 
+async def _emit(
+    run_id: uuid.UUID,
+    message: str,
+    ws_broadcast: Optional[object] = None,
+    log_type: LogType = LogType.TEXT,
+) -> AgentLog:
+    """Save a log entry and optionally broadcast it via WebSocket."""
+    log = await save_log(run_id, {"message": message}, log_type)
+    if ws_broadcast:
+        await ws_broadcast(str(run_id), log)
+    return log
+
+
 async def update_run_cost(
     run_id: uuid.UUID, tokens_in: int, tokens_out: int, cost_usd: float
 ) -> None:
@@ -228,13 +241,42 @@ async def run_agent(
         logger.info("Created new run %s", run.id)
 
     run_id_str = str(run.id)
+
+    # --- Visible log: run initialization ---
+    await _emit(
+        run.id,
+        f"Starting {stage.value} stage for: {task.title}",
+        ws_broadcast,
+    )
+    if task.repo:
+        await _emit(run.id, f"Target repository: {task.repo}", ws_broadcast)
+    if task.jira_key:
+        await _emit(run.id, f"Jira ticket: {task.jira_key}", ws_broadcast)
+
+    # --- Build prompt ---
+    await _emit(run.id, f"Building {stage.value} prompt...", ws_broadcast)
     prompt = _build_prompt(task, stage)
     base_prompt = await _get_base_prompt()
     if base_prompt:
         prompt = base_prompt + "\n\n" + prompt
+        await _emit(
+            run.id,
+            f"Base prompt loaded ({len(base_prompt)} chars).",
+            ws_broadcast,
+        )
         logger.info("Base prompt prepended (%d chars)", len(base_prompt))
+    await _emit(
+        run.id,
+        f"Prompt ready ({len(prompt)} chars).",
+        ws_broadcast,
+    )
 
-    # Set up workspace: create → clone → CLAUDE.md → capture file tree
+    # --- Repo gating check ---
+    if task.repo:
+        await _emit(run.id, "Checking repository permissions...", ws_broadcast)
+        await _emit(run.id, f"Repository {task.repo} is enabled.", ws_broadcast)
+
+    # --- Set up workspace: create → clone → CLAUDE.md → capture file tree ---
     workspace_dir: Optional[str] = None
     if task.repo and not repo_path:
         try:
@@ -245,51 +287,48 @@ async def run_agent(
             token = settings.github_token
 
             # Step 1: Create workspace
-            log = await save_log(run.id, {"message": "Creating workspace..."})
-            if ws_broadcast:
-                await ws_broadcast(str(run.id), log)
+            await _emit(run.id, "Creating workspace...", ws_broadcast)
             ws_path = await create_workspace(run_id_str)
             workspace_dir = str(ws_path)
             await AgentRun.filter(id=run.id).update(workspace_path=workspace_dir)
+            await _emit(
+                run.id, f"Workspace created at {workspace_dir}", ws_broadcast,
+            )
             logger.info("Workspace created: %s", workspace_dir)
 
             # Step 2: Clone repository
-            log = await save_log(
-                run.id, {"message": f"Cloning {task.repo} (branch: {branch})..."}
+            await _emit(
+                run.id,
+                f"Cloning {task.repo} (branch: {branch})...",
+                ws_broadcast,
             )
-            if ws_broadcast:
-                await ws_broadcast(str(run.id), log)
             await clone_repo(ws_path, task.repo, branch, token)
-            log = await save_log(
-                run.id, {"message": f"Cloned {task.repo} successfully."}
+            await _emit(
+                run.id, f"Cloned {task.repo} successfully.", ws_broadcast,
             )
-            if ws_broadcast:
-                await ws_broadcast(str(run.id), log)
             logger.info("Cloned %s (branch %s) into %s", task.repo, branch, workspace_dir)
 
             # Step 3: Write CLAUDE.md
             if base_prompt:
-                log = await save_log(
-                    run.id, {"message": "Writing CLAUDE.md to workspace..."}
+                await _emit(
+                    run.id, "Writing CLAUDE.md to workspace...", ws_broadcast,
                 )
-                if ws_broadcast:
-                    await ws_broadcast(str(run.id), log)
                 write_claude_md(ws_path, base_prompt)
-                log = await save_log(
+                await _emit(
                     run.id,
-                    {"message": f"CLAUDE.md written ({len(base_prompt)} chars)."},
+                    f"CLAUDE.md written ({len(base_prompt)} chars).",
+                    ws_broadcast,
                 )
-                if ws_broadcast:
-                    await ws_broadcast(str(run.id), log)
 
             # Step 4: Capture initial file tree so frontend can show it during the run
+            await _emit(run.id, "Scanning workspace file tree...", ws_broadcast)
             initial_tree = capture_file_tree(ws_path)
             await AgentRun.filter(id=run.id).update(file_tree=initial_tree)
-            log = await save_log(
-                run.id, {"message": f"Workspace ready — {len(initial_tree)} files."}
+            await _emit(
+                run.id,
+                f"Workspace ready — {len(initial_tree)} files.",
+                ws_broadcast,
             )
-            if ws_broadcast:
-                await ws_broadcast(str(run.id), log)
             logger.info(
                 "Workspace ready: %s (repo=%s branch=%s files=%d)",
                 workspace_dir, task.repo, branch, len(initial_tree),
@@ -301,11 +340,12 @@ async def run_agent(
                 finished_at=datetime.now(timezone.utc),
             )
             await Task.filter(id=task.id).update(status=TaskStatus.FAILED)
-            error_log = await save_log(
-                run.id, {"message": f"Workspace setup failed: {e}"}, LogType.ERROR,
+            await _emit(
+                run.id,
+                f"Workspace setup failed: {e}",
+                ws_broadcast,
+                LogType.ERROR,
             )
-            if ws_broadcast:
-                await ws_broadcast(str(run.id), error_log)
             return await AgentRun.get(id=run.id)
 
     cwd = workspace_dir or repo_path or os.getcwd()
@@ -314,10 +354,12 @@ async def run_agent(
         run.id, cwd, len(prompt),
     )
 
-    # Log the Claude CLI launch so users can see the transition from setup to agent
-    log = await save_log(run.id, {"message": "Launching Claude Code agent..."})
-    if ws_broadcast:
-        await ws_broadcast(str(run.id), log)
+    # --- Launching Claude ---
+    await _emit(
+        run.id,
+        f"Launching Claude Code agent (cwd: {cwd})...",
+        ws_broadcast,
+    )
 
     tokens_in = 0
     tokens_out = 0
@@ -357,6 +399,12 @@ async def run_agent(
         )
         _active_processes[run_id_str] = process
         logger.info("Claude CLI process started — pid=%s run=%s", process.pid, run.id)
+
+        await _emit(
+            run.id,
+            f"Claude Code process started (PID: {process.pid}). Streaming output...",
+            ws_broadcast,
+        )
 
         # Stream stdout line by line — each line is a JSON event
         async for line in process.stdout:
@@ -428,7 +476,24 @@ async def run_agent(
             new_status = _STAGE_TO_TASK_STATUS.get(stage)
             if new_status:
                 await Task.filter(id=task.id).update(status=new_status)
+
+            # --- Visible log: success summary ---
+            await _emit(
+                run.id,
+                f"Agent completed successfully. "
+                f"Tokens: {tokens_in:,} in / {tokens_out:,} out — Cost: ${float(cost):.4f}",
+                ws_broadcast,
+            )
+            await _emit(
+                run.id,
+                f"Task status updated to {new_status.value if new_status else 'unchanged'}.",
+                ws_broadcast,
+            )
+
+            # Notify integrations
+            await _emit(run.id, "Notifying integrations...", ws_broadcast)
             await _notify_run_complete(task, stage, success=True)
+            await _emit(run.id, "Notifications sent.", ws_broadcast)
         else:
             stopped_by_user = run_id_str in _stopped_runs
             logger.error(
@@ -446,20 +511,29 @@ async def run_agent(
             )
             if stopped_by_user:
                 _stopped_runs.discard(run_id_str)
-                await save_log(
-                    run.id,
-                    {"message": "Stopped by user"},
-                    LogType.ERROR,
+                await _emit(
+                    run.id, "Stopped by user.", ws_broadcast, LogType.ERROR,
                 )
                 logger.info("Run %s stopped by user for task %s", run.id, task.id)
             else:
                 await Task.filter(id=task.id).update(status=TaskStatus.FAILED)
-                await save_log(
+                await _emit(
                     run.id,
-                    {"message": f"Process exited with code {process.returncode}\n{stderr_output}"},
+                    f"Process exited with code {process.returncode}\n{stderr_output}",
+                    ws_broadcast,
                     LogType.ERROR,
                 )
+
+            if tokens_in or tokens_out:
+                await _emit(
+                    run.id,
+                    f"Tokens used before failure: {tokens_in:,} in / {tokens_out:,} out — Cost: ${float(cost):.4f}",
+                    ws_broadcast,
+                )
+
+            await _emit(run.id, "Notifying integrations...", ws_broadcast)
             await _notify_run_complete(task, stage, success=False)
+            await _emit(run.id, "Notifications sent.", ws_broadcast)
 
     except Exception as e:
         logger.exception(
@@ -473,11 +547,18 @@ async def run_agent(
         )
         if stopped_by_user:
             _stopped_runs.discard(run_id_str)
-            await save_log(run.id, {"message": "Stopped by user"}, LogType.ERROR)
+            await _emit(
+                run.id, "Stopped by user.", ws_broadcast, LogType.ERROR,
+            )
         else:
             await Task.filter(id=task.id).update(status=TaskStatus.FAILED)
-            await save_log(run.id, {"message": str(e)}, LogType.ERROR)
+            await _emit(
+                run.id, str(e), ws_broadcast, LogType.ERROR,
+            )
+
+        await _emit(run.id, "Notifying integrations...", ws_broadcast)
         await _notify_run_complete(task, stage, success=False)
+        await _emit(run.id, "Notifications sent.", ws_broadcast)
     finally:
         _active_processes.pop(run_id_str, None)
 
@@ -486,8 +567,16 @@ async def run_agent(
             try:
                 from pathlib import Path
 
+                await _emit(
+                    run.id, "Capturing final workspace file tree...", ws_broadcast,
+                )
                 file_tree = capture_file_tree(Path(workspace_dir))
                 await AgentRun.filter(id=run.id).update(file_tree=file_tree)
+                await _emit(
+                    run.id,
+                    f"Final file tree captured — {len(file_tree)} files.",
+                    ws_broadcast,
+                )
                 logger.info(
                     "Captured file tree (%d entries) for run %s",
                     len(file_tree), run.id,
@@ -495,6 +584,7 @@ async def run_agent(
             except Exception:
                 logger.exception("Failed to capture file tree for run %s", run.id)
 
+        await _emit(run.id, "Run complete. Cleaning up.", ws_broadcast)
         logger.info("=== Agent run cleanup done === run=%s task=%s", run_id_str, task.id)
 
     return await AgentRun.get(id=run.id)
