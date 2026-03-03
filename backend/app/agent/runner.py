@@ -406,6 +406,22 @@ async def run_agent(
             ws_broadcast,
         )
 
+        # Drain stderr concurrently to prevent pipe deadlock.
+        # The --verbose flag causes Claude CLI to write debug output to stderr.
+        # If we only read stderr after stdout finishes, the stderr pipe buffer
+        # can fill up (~64KB), blocking the CLI and deadlocking the runner.
+        stderr_chunks: list[bytes] = []
+
+        async def _drain_stderr() -> None:
+            assert process.stderr is not None
+            while True:
+                chunk = await process.stderr.read(8192)
+                if not chunk:
+                    break
+                stderr_chunks.append(chunk)
+
+        stderr_task = asyncio.create_task(_drain_stderr())
+
         # Stream stdout line by line — each line is a JSON event
         async for line in process.stdout:
             decoded = line.decode().rstrip()
@@ -445,11 +461,10 @@ async def run_agent(
                 await ws_broadcast(str(run.id), log)
 
         await process.wait()
+        await stderr_task
 
-        # Always capture stderr
-        stderr_output = ""
-        if process.stderr:
-            stderr_output = (await process.stderr.read()).decode().strip()
+        # Collect stderr output
+        stderr_output = b"".join(stderr_chunks).decode(errors="replace").strip()
         if stderr_output:
             logger.warning(
                 "CLI stderr (run=%s, exit=%d):\n%s",
