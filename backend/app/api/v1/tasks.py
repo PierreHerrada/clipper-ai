@@ -60,7 +60,7 @@ def _run_to_dict(run: AgentRun) -> dict:
 
 @router.get("")
 async def list_tasks() -> list[dict]:
-    tasks = await Task.all().order_by("-created_at")
+    tasks = await Task.active().order_by("-created_at")
     return [await _task_to_dict(t) for t in tasks]
 
 

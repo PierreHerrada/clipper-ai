@@ -15,7 +15,7 @@ async def get_stats() -> dict:
 
     tasks_by_status = {}
     for status in TaskStatus:
-        count = await Task.filter(status=status).count()
+        count = await Task.active().filter(status=status).count()
         tasks_by_status[status.value] = count
 
     cost_by_stage = {}
@@ -33,7 +33,7 @@ async def get_stats() -> dict:
 
 @router.get("/costs")
 async def get_costs() -> list[dict]:
-    tasks = await Task.all()
+    tasks = await Task.active()
     result = []
     for task in tasks:
         runs = await AgentRun.filter(task_id=task.id)

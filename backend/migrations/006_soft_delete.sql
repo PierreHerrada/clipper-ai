@@ -1,0 +1,2 @@
+-- Add soft-delete support to tasks
+ALTER TABLE tasks ADD COLUMN deleted_at TIMESTAMPTZ;

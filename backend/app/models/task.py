@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 from enum import Enum
 
 from tortoise import fields
 from tortoise.models import Model
+from tortoise.queryset import QuerySet
 
 
 class TaskStatus(str, Enum):
@@ -29,6 +32,7 @@ class Task(Model):
     repo = fields.TextField(null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
+    deleted_at = fields.DatetimeField(null=True, default=None)
 
     runs: fields.ReverseRelation["AgentRun"]  # noqa: F821
     conversations: fields.ReverseRelation["Conversation"]  # noqa: F821
@@ -36,6 +40,11 @@ class Task(Model):
     class Meta:
         table = "tasks"
         ordering = ["-created_at"]
+
+    @classmethod
+    def active(cls) -> QuerySet[Task]:
+        """Return only non-soft-deleted tasks."""
+        return cls.filter(deleted_at=None)
 
     def __str__(self) -> str:
         return f"Task({self.title}, status={self.status.value})"

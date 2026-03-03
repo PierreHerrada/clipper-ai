@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 from app.config import settings
@@ -48,6 +49,36 @@ async def sync_jira_tickets(jira: JiraIntegration) -> int:
 
     logger.info("Jira sync: found %d issues matching label '%s'", len(issues), label)
 
+    jira_keys = {issue["key"] for issue in issues}
+
+    # Soft-delete active tasks whose jira_key is no longer in the Jira results
+    active_jira_tasks = await Task.active().filter(
+        jira_key__not_isnull=True,
+    ).exclude(jira_key="").all()
+    now = datetime.now(timezone.utc)
+    for task in active_jira_tasks:
+        if task.jira_key not in jira_keys:
+            task.deleted_at = now
+            await task.save()
+            logger.info(
+                "Jira sync: soft-deleted task '%s' (%s) — key %s no longer in Jira results",
+                task.title[:60], task.id, task.jira_key,
+            )
+
+    # Restore previously soft-deleted tasks that reappear in the results
+    deleted_jira_tasks = await Task.filter(
+        deleted_at__not_isnull=True,
+        jira_key__not_isnull=True,
+    ).exclude(jira_key="").all()
+    for task in deleted_jira_tasks:
+        if task.jira_key in jira_keys:
+            task.deleted_at = None
+            await task.save()
+            logger.info(
+                "Jira sync: restored soft-deleted task '%s' (%s) — key %s reappeared",
+                task.title[:60], task.id, task.jira_key,
+            )
+
     created = 0
     for issue in issues:
         try:
@@ -61,11 +92,11 @@ async def sync_jira_tickets(jira: JiraIntegration) -> int:
 
 
 async def push_board_tasks_to_jira(jira: JiraIntegration) -> int:
-    """Push board tasks that have no Jira key to Jira."""
-    tasks = await Task.filter(jira_key=None).all()
+    """Push active board tasks that have no Jira key to Jira."""
+    tasks = await Task.active().filter(jira_key=None).all()
     if not tasks:
         # Also check for empty string jira_key
-        tasks = await Task.filter(jira_key="").all()
+        tasks = await Task.active().filter(jira_key="").all()
     if not tasks:
         return 0
 
@@ -97,10 +128,15 @@ async def push_board_tasks_to_jira(jira: JiraIntegration) -> int:
 
 
 async def import_jira_issue(issue: dict) -> Optional[Task]:
-    """Import a single Jira issue dict into the board. Returns the Task if created, None if it already exists."""
+    """Import a single Jira issue dict into the board. Returns the Task if created/restored, None if it already exists."""
     key = issue["key"]
     existing = await Task.filter(jira_key=key).first()
     if existing:
+        if existing.deleted_at is not None:
+            existing.deleted_at = None
+            await existing.save()
+            logger.info("Jira import: restored soft-deleted task %s (%s)", key, existing.id)
+            return existing
         logger.debug("Jira import: skipping %s (already exists)", key)
         return None
 
