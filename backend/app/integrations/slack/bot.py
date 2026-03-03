@@ -136,6 +136,33 @@ class SlackIntegration(BaseIntegration):
                 slack_user_id=user_id,
             )
 
+            # Persist the @mention as a chat message
+            user_name = ""
+            channel_name = ""
+            try:
+                user_info = await client.users_info(user=user_id)
+                user_name = user_info["user"].get("real_name", user_info["user"].get("name", ""))
+            except Exception:
+                logger.warning("Slack bot: could not resolve user name for %s", user_id)
+            try:
+                conv_info = await client.conversations_info(channel=channel_id)
+                channel_name = conv_info["channel"].get("name", "")
+            except Exception:
+                logger.warning("Slack bot: could not resolve channel name for %s", channel_id)
+
+            await ChatMessage.create(
+                id=uuid.uuid4(),
+                channel_id=channel_id,
+                channel_name=channel_name,
+                user_id=user_id,
+                user_name=user_name,
+                message=text,
+                slack_ts=slack_ts,
+                thread_ts=None,
+                task_id=task.id,
+            )
+            logger.info("Slack bot: persisted @mention chat message for task %s", task.id)
+
             # Create a matching Jira issue if Jira is configured
             jira_msg = ""
             try:
@@ -183,14 +210,14 @@ class SlackIntegration(BaseIntegration):
             # Only persist messages that @mention Corsair or are replies
             # in a thread started by a @mention
             is_mention = bot_user_id and f"<@{bot_user_id}>" in text
-            is_mention_thread_reply = False
+            task_for_thread = None
             if thread_ts:
-                is_mention_thread_reply = await Task.exists().filter(
+                task_for_thread = await Task.filter(
                     slack_channel=channel_id,
                     slack_thread_ts=thread_ts,
-                )
+                ).first()
 
-            if not is_mention and not is_mention_thread_reply:
+            if not is_mention and task_for_thread is None:
                 return
 
             logger.info(
@@ -221,6 +248,7 @@ class SlackIntegration(BaseIntegration):
                 message=text,
                 slack_ts=slack_ts,
                 thread_ts=thread_ts,
+                task_id=task_for_thread.id if task_for_thread else None,
             )
             logger.info(
                 "Slack bot: persisted message from %s in #%s",

@@ -35,3 +35,23 @@ export async function triggerAnalysis(params: {
   if (!resp.ok) throw new Error("Failed to trigger analysis");
   return resp.json();
 }
+
+export async function triggerInvestigation(params: {
+  url?: string;
+  query?: string;
+  trace_id?: string;
+  incident_id?: string;
+  description?: string;
+}): Promise<{
+  task_id: string;
+  analysis_id: string;
+  run: { id: string; stage: string; status: string };
+}> {
+  const resp = await apiFetch(`${BASE}/investigate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  if (!resp.ok) throw new Error("Failed to trigger investigation");
+  return resp.json();
+}

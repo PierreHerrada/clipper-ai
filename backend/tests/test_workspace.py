@@ -62,15 +62,17 @@ class TestCloneRepo:
         mock_process = AsyncMock()
         mock_process.communicate = AsyncMock(return_value=(b"", b""))
         mock_process.returncode = 0
+        mock_process.wait = AsyncMock(return_value=0)
 
         with patch("asyncio.create_subprocess_exec", return_value=mock_process) as mock_exec:
             result = await clone_repo(tmp_path, "org/repo", "main", "ghp_test123")
 
-        call_args = mock_exec.call_args[0]
-        assert "git" in call_args
-        assert "clone" in call_args
-        assert "--depth" in call_args
-        assert str(tmp_path) in call_args
+        # First call is git clone; subsequent calls are git config
+        clone_args = mock_exec.call_args_list[0][0]
+        assert "git" in clone_args
+        assert "clone" in clone_args
+        assert "--depth" in clone_args
+        assert str(tmp_path) in clone_args
         assert result == tmp_path
 
     async def test_clone_failure_raises(self, tmp_path):
@@ -100,14 +102,15 @@ class TestCloneRepo:
         mock_process = AsyncMock()
         mock_process.communicate = AsyncMock(return_value=(b"", b""))
         mock_process.returncode = 0
+        mock_process.wait = AsyncMock(return_value=0)
 
         with patch("asyncio.create_subprocess_exec", return_value=mock_process) as mock_exec:
             result = await clone_repo(
                 tmp_path, "org/repo", "main", "ghp_test123", subfolder="org--repo",
             )
 
-        call_args = mock_exec.call_args[0]
-        assert str(tmp_path / "org--repo") in call_args
+        clone_args = mock_exec.call_args_list[0][0]
+        assert str(tmp_path / "org--repo") in clone_args
         assert result == tmp_path / "org--repo"
 
     async def test_clone_chowns_files_when_root(self, tmp_path):
@@ -115,6 +118,7 @@ class TestCloneRepo:
         mock_process = AsyncMock()
         mock_process.communicate = AsyncMock(return_value=(b"", b""))
         mock_process.returncode = 0
+        mock_process.wait = AsyncMock(return_value=0)
 
         # Create a fake cloned tree to verify os.walk-based chown
         target = tmp_path / "org--repo"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
@@ -9,6 +10,7 @@ from pydantic import BaseModel
 from app.integrations.datadog.analyzer import run_analysis
 from app.integrations.datadog.client import DatadogIntegration
 from app.integrations.registry import IntegrationRegistry
+from app.models.agent_run import RunStage, RunStatus
 from app.models.datadog_analysis import AnalysisSource, AnalysisStatus, DatadogAnalysis
 
 router = APIRouter(prefix="/api/v1/datadog", tags=["datadog"])
@@ -135,3 +137,151 @@ async def trigger_analysis(body: AnalyzeRequest, background_tasks: BackgroundTas
         body.url, body.query, body.trace_id,
     )
     return _analysis_to_dict(analysis)
+
+
+class InvestigateRequest(BaseModel):
+    url: Optional[str] = None
+    query: Optional[str] = None
+    trace_id: Optional[str] = None
+    incident_id: Optional[str] = None
+    description: Optional[str] = None
+
+
+async def _run_investigate_background(task_id: str, run_id: str, datadog_context: str) -> None:
+    """Background task that runs the INVESTIGATE agent."""
+    from app.agent.runner import run_agent
+    from app.models import AgentRun, Task
+
+    task = await Task.get(id=task_id)
+    existing_run = await AgentRun.get(id=run_id)
+    await run_agent(
+        task, RunStage.INVESTIGATE,
+        existing_run=existing_run, datadog_context=datadog_context,
+    )
+
+
+async def _build_investigation_context(
+    client: DatadogIntegration,
+    url: Optional[str],
+    query: Optional[str],
+    trace_id: Optional[str],
+    incident_id: Optional[str],
+) -> str:
+    """Pre-fetch available Datadog data and build a context string for the agent."""
+    parts: list[str] = []
+
+    # Parse URL if provided
+    if url:
+        parsed = client.parse_datadog_url(url)
+        if "trace_id" in parsed and not trace_id:
+            trace_id = parsed["trace_id"]
+        if "query" in parsed and not query:
+            query = parsed["query"]
+
+    # Parse incident ID from text
+    if not incident_id and url:
+        incident_id = client.parse_incident_id(url)
+
+    # Fetch incident details
+    if incident_id:
+        try:
+            incident_data = await client.get_incident(incident_id)
+            parts.append(f"Incident {incident_id}:\n{_safe_json(incident_data)}")
+        except Exception as e:
+            parts.append(f"Failed to fetch incident {incident_id}: {e}")
+
+    # Fetch logs
+    if query:
+        try:
+            logs = await client.search_logs(query, "now-24h", "now")
+            if logs:
+                parts.append(f"Logs ({len(logs)} entries, query={query}):\n{_safe_json(logs[:10])}")
+        except Exception as e:
+            parts.append(f"Failed to fetch logs: {e}")
+
+    # Fetch trace
+    if trace_id:
+        try:
+            spans = await client.get_trace(trace_id)
+            if spans:
+                parts.append(f"Trace {trace_id} ({len(spans)} spans):\n{_safe_json(spans[:20])}")
+        except Exception as e:
+            parts.append(f"Failed to fetch trace: {e}")
+
+    return "\n\n".join(parts)
+
+
+def _safe_json(obj: object) -> str:
+    """Serialize to JSON, truncating if too large."""
+    import json
+
+    text = json.dumps(obj, indent=2, default=str)
+    if len(text) > 5000:
+        return text[:5000] + "\n... (truncated)"
+    return text
+
+
+@router.post("/investigate", status_code=201)
+async def trigger_investigation(
+    body: InvestigateRequest, background_tasks: BackgroundTasks
+) -> dict:
+    has_input = body.url or body.query or body.trace_id or body.incident_id or body.description
+    if not has_input:
+        raise HTTPException(
+            status_code=422,
+            detail="At least one of url, query, trace_id, incident_id, or description is required",
+        )
+
+    client = _get_datadog_client()
+
+    # Pre-fetch available data
+    datadog_context = await _build_investigation_context(
+        client, body.url, body.query, body.trace_id, body.incident_id,
+    )
+
+    trigger = body.url or body.query or body.incident_id or body.trace_id or "manual"
+    description = body.description or f"Datadog investigation: {trigger}"
+
+    # Create analysis record
+    analysis = await DatadogAnalysis.create(
+        source=AnalysisSource.MANUAL,
+        trigger=trigger,
+        status=AnalysisStatus.ANALYZING,
+        query=body.query or "",
+        trace_id=body.trace_id,
+    )
+
+    # Create Task
+    from app.models import Task
+
+    task = await Task.create(
+        title=f"DD Investigation: {trigger[:80]}",
+        description=description,
+        slack_channel="",
+        slack_thread_ts="",
+        slack_user_id="",
+    )
+
+    # Create AgentRun
+    from app.models import AgentRun
+
+    run = await AgentRun.create(
+        id=uuid.uuid4(),
+        task=task,
+        stage=RunStage.INVESTIGATE,
+        status=RunStatus.RUNNING,
+    )
+
+    background_tasks.add_task(
+        _run_investigate_background, str(task.id), str(run.id), datadog_context,
+    )
+
+    return {
+        "task_id": str(task.id),
+        "analysis_id": str(analysis.id),
+        "run": {
+            "id": str(run.id),
+            "stage": run.stage.value,
+            "status": run.status.value,
+        },
+    }

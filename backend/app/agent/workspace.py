@@ -78,6 +78,16 @@ async def clone_repo(
 
     logger.info("Cloned %s (branch %s) into %s", repo_full_name, branch, target)
 
+    # Configure git identity so the agent can commit
+    for key, val in [("user.email", "corsair@corsair.dev"), ("user.name", "Corsair")]:
+        cfg = await asyncio.create_subprocess_exec(
+            "git", "config", key, val,
+            cwd=str(target),
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await cfg.wait()
+
     # Recursively chown to corsair user so the agent process can read/write
     if os.getuid() == 0:
         try:
@@ -239,6 +249,106 @@ def read_pr_url(workspace: Path) -> Optional[str]:
     if pr_path.exists():
         content = pr_path.read_text(encoding="utf-8").strip()
         return content if content else None
+    return None
+
+
+_DATADOG_HELPER_SCRIPT = '''\
+"""Datadog API helper — pre-configured with credentials from env vars."""
+
+import json
+import os
+from urllib.request import Request, urlopen
+from urllib.parse import quote
+
+
+DD_API_KEY = os.environ.get("DD_API_KEY", "")
+DD_APP_KEY = os.environ.get("DD_APP_KEY", "")
+DD_SITE = os.environ.get("DD_SITE", "datadoghq.com")
+BASE_URL = f"https://api.{DD_SITE}/api"
+
+_HEADERS = {
+    "DD-API-KEY": DD_API_KEY,
+    "DD-APPLICATION-KEY": DD_APP_KEY,
+    "Content-Type": "application/json",
+}
+
+
+def _request(method: str, path: str, body: dict | None = None) -> dict:
+    url = f"{BASE_URL}{path}"
+    data = json.dumps(body).encode() if body else None
+    req = Request(url, data=data, headers=_HEADERS, method=method)
+    with urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read())
+
+
+def search_logs(query: str, from_ts: str, to_ts: str) -> list[dict]:
+    """Search Datadog logs."""
+    payload = {
+        "filter": {"query": query, "from": from_ts, "to": to_ts},
+        "sort": "-timestamp",
+        "page": {"limit": 100},
+    }
+    data = _request("POST", "/v2/logs/events/search", payload)
+    return data.get("data", [])
+
+
+def get_trace(trace_id: str) -> list[dict]:
+    """Fetch spans for a trace."""
+    payload = {
+        "data": {
+            "attributes": {
+                "filter": {"query": f"trace_id:{trace_id}", "from": "now-24h", "to": "now"},
+                "sort": "timestamp",
+                "page": {"limit": 200},
+            },
+            "type": "search_request",
+        },
+    }
+    data = _request("POST", "/v2/spans/events/search", payload)
+    return data.get("data", [])
+
+
+def get_incident(incident_id: str) -> dict:
+    """Fetch a Datadog incident by ID."""
+    return _request("GET", f"/v2/incidents/{incident_id}")
+
+
+def get_monitor(monitor_id: int) -> dict:
+    """Fetch a Datadog monitor by ID."""
+    return _request("GET", f"/v1/monitor/{monitor_id}")
+
+
+def search_events(query: str, from_ts: str, to_ts: str) -> list[dict]:
+    """Search Datadog events."""
+    payload = {
+        "filter": {"query": query, "from": from_ts, "to": to_ts},
+        "sort": "timestamp",
+        "page": {"limit": 100},
+    }
+    data = _request("POST", "/v2/events/search", payload)
+    return data.get("data", [])
+
+
+if __name__ == "__main__":
+    import sys
+    print(f"Datadog helper ready — site={DD_SITE}, key={'set' if DD_API_KEY else 'MISSING'}")
+'''
+
+
+def write_datadog_helper(
+    workspace: Path, dd_api_key: str, dd_app_key: str, dd_site: str
+) -> None:
+    """Write a datadog_helper.py script to the workspace root."""
+    helper_path = workspace / "datadog_helper.py"
+    helper_path.write_text(_DATADOG_HELPER_SCRIPT, encoding="utf-8")
+    logger.info("Wrote datadog_helper.py to %s", workspace)
+
+
+def read_investigation_md(workspace: Path) -> Optional[str]:
+    """Read INVESTIGATION.md from the workspace root. Returns None if not found."""
+    inv_path = workspace / "INVESTIGATION.md"
+    if inv_path.exists():
+        return inv_path.read_text(encoding="utf-8")
     return None
 
 

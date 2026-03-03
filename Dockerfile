@@ -23,13 +23,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 # --- Stage 3: Final Image ---
 FROM python:3.12-slim
 
-# Install nginx, supervisord, and Node.js (for Claude Code CLI)
+# Install nginx, supervisord, Node.js (for Claude Code CLI), and JDK (for Gradle/Kotlin projects)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends nginx supervisor curl git && \
+    apt-get install -y --no-install-recommends nginx supervisor curl git default-jdk-headless && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
     npm install -g @anthropic-ai/claude-code && \
     rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/usr/lib/jvm/default-java
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 WORKDIR /app
 

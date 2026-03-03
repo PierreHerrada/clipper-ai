@@ -35,7 +35,7 @@ const defaultStats = {
     done: 5,
     failed: 0,
   },
-  cost_by_stage: { plan: 1.5, work: 3.0, review: 1.0 },
+  cost_by_stage: { plan: 1.5, work: 3.0, review: 1.0, investigate: 0 },
 };
 
 describe("Dashboard", () => {

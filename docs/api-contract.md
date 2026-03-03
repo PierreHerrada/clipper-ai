@@ -91,7 +91,7 @@ Returns a single task with its latest agent run and recent logs.
   "latest_run": {
     "id": "uuid",
     "task_id": "uuid",
-    "stage": "plan|work|review",
+    "stage": "plan|work|review|investigate",
     "status": "running|done|failed",
     "tokens_in": 0,
     "tokens_out": 0,
@@ -161,7 +161,7 @@ Returns all agent runs for a task, including their logs, ordered by `started_at`
   {
     "id": "uuid",
     "task_id": "uuid",
-    "stage": "plan|work|review",
+    "stage": "plan|work|review|investigate",
     "status": "running|done|failed",
     "tokens_in": 0,
     "tokens_out": 0,
@@ -483,9 +483,39 @@ Manually trigger a Datadog analysis. At least one of `url`, `query`, or `trace_i
 {"detail": "At least one of url, query, or trace_id is required"}
 ```
 
+#### `POST /api/v1/datadog/investigate`
+
+Trigger a Datadog investigation agent. At least one of `url`, `query`, `trace_id`, `incident_id`, or `description` is required.
+
+**Request Body:**
+```json
+{
+  "url": "string|null",
+  "query": "string|null",
+  "trace_id": "string|null",
+  "incident_id": "string|null",
+  "description": "string|null"
+}
+```
+
+**Response:** `201 Created`
+```json
+{
+  "task_id": "uuid",
+  "analysis_id": "uuid",
+  "run": {
+    "id": "uuid",
+    "stage": "investigate",
+    "status": "running"
+  }
+}
+```
+
+**Error:** `422 Unprocessable Entity`, `503 Service Unavailable`
+
 #### `POST /api/v1/webhooks/datadog`
 
-Receives Datadog Monitor webhook payloads. Parses alert metadata and creates an analysis automatically.
+Receives Datadog Monitor webhook payloads. Parses alert metadata, creates an analysis, and triggers an investigation agent automatically.
 
 **Request Body:** Datadog Monitor webhook JSON (includes `title`, `tags`, `logs_sample`, etc.)
 
@@ -687,7 +717,7 @@ Each message is a JSON-encoded AgentLog:
 
 ```typescript
 type TaskStatus = "backlog" | "planned" | "working" | "reviewing" | "done" | "failed";
-type RunStage = "plan" | "work" | "review";
+type RunStage = "plan" | "work" | "review" | "investigate";
 type RunStatus = "running" | "done" | "failed";
 type LogType = "text" | "tool_use" | "tool_result" | "error";
 

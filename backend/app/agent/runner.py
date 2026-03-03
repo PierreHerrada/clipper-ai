@@ -11,14 +11,21 @@ from decimal import Decimal
 from typing import Optional
 
 from app.agent.cost import INPUT_PRICE_PER_M, OUTPUT_PRICE_PER_M
-from app.agent.prompts import build_plan_prompt, build_review_prompt, build_work_prompt
+from app.agent.prompts import (
+    build_investigate_prompt,
+    build_plan_prompt,
+    build_review_prompt,
+    build_work_prompt,
+)
 from app.agent.workspace import (
     capture_file_tree,
     clone_all_repos,
     create_workspace,
+    read_investigation_md,
     read_lessons_md,
     read_pr_url,
     write_claude_md,
+    write_datadog_helper,
     write_lessons_md,
     write_plan_md,
     write_skill_files,
@@ -108,7 +115,7 @@ async def _get_setting_value(key: str) -> str:
     return ""
 
 
-def _build_prompt(task: Task, stage: RunStage) -> str:
+def _build_prompt(task: Task, stage: RunStage, datadog_context: str = "") -> str:
     if stage == RunStage.PLAN:
         return build_plan_prompt(task.title, task.description, task.acceptance, task_repo=task.repo)
     elif stage == RunStage.WORK:
@@ -123,6 +130,8 @@ def _build_prompt(task: Task, stage: RunStage) -> str:
             task.title,
             task.jira_url or "",
         )
+    elif stage == RunStage.INVESTIGATE:
+        return build_investigate_prompt(task.title, task.description, datadog_context)
     raise ValueError(f"Unknown stage: {stage}")
 
 
@@ -130,6 +139,7 @@ _STAGE_TO_TASK_STATUS = {
     RunStage.PLAN: TaskStatus.PLANNED,
     RunStage.WORK: TaskStatus.WORKING,
     RunStage.REVIEW: TaskStatus.REVIEWING,
+    RunStage.INVESTIGATE: TaskStatus.DONE,
 }
 
 
@@ -360,6 +370,7 @@ async def run_agent(
     ws_broadcast: Optional[object] = None,
     repo_path: Optional[str] = None,
     existing_run: Optional[AgentRun] = None,
+    datadog_context: str = "",
 ) -> AgentRun:
     """Execute Claude Code CLI for a given task and stage."""
     logger.info(
@@ -421,7 +432,7 @@ async def run_agent(
 
     # --- Build prompt ---
     await _emit(run.id, f"Building {stage.value} prompt...", ws_broadcast)
-    prompt = _build_prompt(task, stage)
+    prompt = _build_prompt(task, stage, datadog_context=datadog_context)
     base_prompt = await _get_base_prompt()
     if base_prompt:
         prompt = base_prompt + "\n\n" + prompt
@@ -445,7 +456,56 @@ async def run_agent(
     # --- Set up workspace ---
     workspace_dir: Optional[str] = None
     lessons_before: Optional[str] = None
-    if not repo_path:
+
+    # INVESTIGATE stage: lightweight workspace (no repo clone)
+    if stage == RunStage.INVESTIGATE and not repo_path:
+        try:
+            await _emit(run.id, "Creating investigation workspace...", ws_broadcast)
+            ws_path = await create_workspace(run_id_str)
+            workspace_dir = str(ws_path)
+            await AgentRun.filter(id=run.id).update(workspace_path=workspace_dir)
+
+            # Write datadog helper script
+            write_datadog_helper(
+                ws_path, settings.dd_api_key, settings.dd_app_key, settings.dd_site,
+            )
+            await _emit(run.id, "Wrote datadog_helper.py to workspace.", ws_broadcast)
+
+            # Write CLAUDE.md
+            base_prompt = await _get_base_prompt()
+            if base_prompt:
+                write_claude_md(ws_path, base_prompt)
+
+            # Write skill / subagent / lessons files
+            skills_json = await _get_setting_value("skills")
+            if skills_json:
+                write_skill_files(ws_path, skills_json)
+            subagents_json = await _get_setting_value("subagents")
+            if subagents_json:
+                write_subagent_files(ws_path, subagents_json)
+            lessons_content = await _get_setting_value("lessons")
+            if lessons_content:
+                write_lessons_md(ws_path, lessons_content)
+                lessons_before = lessons_content
+
+            initial_tree = capture_file_tree(ws_path)
+            await AgentRun.filter(id=run.id).update(file_tree=initial_tree)
+            await _emit(
+                run.id,
+                f"Investigation workspace ready — {len(initial_tree)} files.",
+                ws_broadcast,
+            )
+        except Exception as e:
+            logger.exception("Investigation workspace setup failed for run %s: %s", run.id, e)
+            await AgentRun.filter(id=run.id).update(
+                status=RunStatus.FAILED,
+                finished_at=datetime.now(timezone.utc),
+            )
+            await Task.filter(id=task.id).update(status=TaskStatus.FAILED)
+            await _emit(run.id, f"Workspace setup failed: {e}", ws_broadcast, LogType.ERROR)
+            return await AgentRun.get(id=run.id)
+
+    if stage != RunStage.INVESTIGATE and not repo_path:
         try:
             from app.models.repository import Repository
 
@@ -610,17 +670,23 @@ async def run_agent(
             except KeyError:
                 logger.warning("User 'corsair' not found — running as current user")
 
+        sub_env = {
+            **os.environ,
+            "ANTHROPIC_API_KEY": settings.anthropic_api_key,
+            "HOME": pwd.getpwnam("corsair").pw_dir if os.getuid() == 0 else os.environ.get("HOME", ""),
+        }
+        if stage == RunStage.INVESTIGATE:
+            sub_env["DD_API_KEY"] = settings.dd_api_key
+            sub_env["DD_APP_KEY"] = settings.dd_app_key
+            sub_env["DD_SITE"] = settings.dd_site
+
         process = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=cwd,
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env={
-                **os.environ,
-                "ANTHROPIC_API_KEY": settings.anthropic_api_key,
-                "HOME": pwd.getpwnam("corsair").pw_dir if os.getuid() == 0 else os.environ.get("HOME", ""),
-            },
+            env=sub_env,
             preexec_fn=_demote_to_corsair if os.getuid() == 0 else None,
         )
         _active_processes[run_id_str] = process
@@ -730,6 +796,23 @@ async def run_agent(
                 await Task.filter(id=task.id).update(status=new_status)
             if stage == RunStage.PLAN and last_assistant_text:
                 await Task.filter(id=task.id).update(plan=last_assistant_text)
+
+            # Read INVESTIGATION.md from workspace (written by agent during investigate stage)
+            if stage == RunStage.INVESTIGATE and workspace_dir and os.path.isdir(workspace_dir):
+                try:
+                    from pathlib import Path as _IPath
+
+                    inv_text = read_investigation_md(_IPath(workspace_dir))
+                    if inv_text:
+                        await Task.filter(id=task.id).update(plan=inv_text)
+                        await _emit(
+                            run.id,
+                            f"Investigation summary saved ({len(inv_text)} chars).",
+                            ws_broadcast,
+                        )
+                        logger.info("Investigation summary saved for task %s", task.id)
+                except Exception:
+                    logger.exception("Failed to read INVESTIGATION.md for run %s", run.id)
 
             # Read PR URL from workspace (written by agent during review stage)
             detected_pr_url = ""

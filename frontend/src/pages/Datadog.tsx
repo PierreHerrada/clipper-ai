@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useDatadog } from "../hooks/useDatadog";
 import type { DatadogAnalysis, AnalysisStatus } from "../types";
 
@@ -146,10 +147,13 @@ export default function Datadog() {
     selectedAnalysis,
     selectAnalysis,
     clearSelection,
+    investigate,
   } = useDatadog();
 
+  const navigate = useNavigate();
   const [input, setInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [investigating, setInvestigating] = useState(false);
 
   const handleAnalyze = async () => {
     if (!input.trim()) return;
@@ -167,6 +171,35 @@ export default function Datadog() {
     await analyze(params);
     setInput("");
     setSubmitting(false);
+  };
+
+  const handleInvestigate = async () => {
+    if (!input.trim()) return;
+    setInvestigating(true);
+    try {
+      const value = input.trim();
+      const params: {
+        url?: string;
+        query?: string;
+        trace_id?: string;
+        incident_id?: string;
+        description?: string;
+      } = {};
+      if (value.startsWith("http")) {
+        params.url = value;
+      } else if (/^[a-fA-F0-9]{16,}$/.test(value)) {
+        params.trace_id = value;
+      } else if (/^INC-\w+/i.test(value)) {
+        params.incident_id = value;
+      } else {
+        params.query = value;
+        params.description = value;
+      }
+      const taskId = await investigate(params);
+      navigate(`/tasks/${taskId}`);
+    } catch {
+      setInvestigating(false);
+    }
   };
 
   if (loading && analyses.length === 0) {
@@ -197,6 +230,13 @@ export default function Datadog() {
             className="px-6 py-2 bg-teal/20 border border-teal/40 rounded-lg text-teal text-sm font-medium hover:bg-teal/30 disabled:opacity-50 cursor-pointer"
           >
             {submitting ? "Analyzing..." : "Analyze"}
+          </button>
+          <button
+            onClick={handleInvestigate}
+            disabled={investigating || !input.trim()}
+            className="px-6 py-2 bg-gold/20 border border-gold/40 rounded-lg text-gold text-sm font-medium hover:bg-gold/30 disabled:opacity-50 cursor-pointer"
+          >
+            {investigating ? "Investigating..." : "Investigate"}
           </button>
         </div>
         {error && (

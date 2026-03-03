@@ -61,3 +61,41 @@ Then open a Pull Request on GitHub with:
 
 After creating the PR, write the PR URL to a file called PR_URL.txt at the workspace root.
 The file should contain only the PR URL, nothing else."""
+
+
+def build_investigate_prompt(
+    title: str,
+    description: str,
+    datadog_context: str = "",
+) -> str:
+    context_block = ""
+    if datadog_context:
+        context_block = f"\nPre-fetched Datadog data:\n{datadog_context}\n"
+
+    return f"""You are a senior SRE / incident investigator.
+Investigate the following Datadog alert or incident and produce a structured summary.
+
+Title: {title}
+Description: {description}
+{context_block}
+Your investigation should include:
+1. **Timeline** — What happened and when, in chronological order
+2. **Root cause** — What triggered the incident and why
+3. **Affected services** — Which services/monitors were impacted
+4. **Resolution** — What was done (or needs to be done) to resolve it
+
+You have access to Datadog API credentials via environment variables:
+- DD_API_KEY, DD_APP_KEY, DD_SITE (default: datadoghq.com)
+
+You can write and run Python scripts to fetch additional data from Datadog APIs:
+- Logs: POST https://api.{{DD_SITE}}/api/v2/logs/events/search
+- Traces: POST https://api.{{DD_SITE}}/api/v2/spans/events/search
+- Incidents: GET https://api.{{DD_SITE}}/api/v2/incidents
+- Monitors: GET https://api.{{DD_SITE}}/api/v1/monitor
+- Events: POST https://api.{{DD_SITE}}/api/v2/events/search
+
+Include headers: DD-API-KEY and DD-APPLICATION-KEY.
+
+A helper script `datadog_helper.py` is available in the workspace root.
+
+Write your final investigation summary to INVESTIGATION.md at the workspace root."""

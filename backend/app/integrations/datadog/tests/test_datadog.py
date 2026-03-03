@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
+from app.agent.prompts import build_investigate_prompt
+from app.agent.workspace import read_investigation_md, write_datadog_helper
 from app.integrations.datadog.analyzer import analyze_logs, analyze_trace, run_analysis
 from app.integrations.datadog.client import DatadogIntegration
 from app.models.datadog_analysis import AnalysisSource, AnalysisStatus, DatadogAnalysis
@@ -258,3 +260,115 @@ class TestDatadogAPI:
         retrieved = await DatadogAnalysis.get(id=analysis.id)
         assert retrieved.status == AnalysisStatus.FAILED
         assert retrieved.error_message == "Could not parse URL"
+
+
+# ── New Client Method Tests ───────────────────────────────────────────
+
+
+class TestNewClientMethods:
+    async def test_get_incident(self, dd):
+        mock_data = {"data": {"id": "inc-123", "type": "incidents"}}
+        mock_response = _make_response(200, mock_data)
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=mock_response):
+            result = await dd.get_incident("inc-123")
+            assert result["data"]["id"] == "inc-123"
+
+    async def test_list_incidents(self, dd):
+        mock_data = {"data": [{"id": "inc-1"}, {"id": "inc-2"}]}
+        mock_response = _make_response(200, mock_data)
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=mock_response):
+            result = await dd.list_incidents(query="service:web")
+            assert len(result) == 2
+
+    async def test_get_monitor(self, dd):
+        mock_data = {"id": 12345, "name": "CPU monitor", "type": "metric alert"}
+        mock_response = _make_response(200, mock_data)
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=mock_response):
+            result = await dd.get_monitor(12345)
+            assert result["id"] == 12345
+            assert result["name"] == "CPU monitor"
+
+    async def test_search_monitors(self, dd):
+        mock_data = [{"id": 1, "name": "Mon A"}, {"id": 2, "name": "Mon B"}]
+        mock_response = _make_response(200, mock_data)
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=mock_response):
+            result = await dd.search_monitors("cpu")
+            assert len(result) == 2
+
+    async def test_search_monitors_dict_response(self, dd):
+        mock_data = {"monitors": []}
+        mock_response = _make_response(200, mock_data)
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=mock_response):
+            result = await dd.search_monitors("cpu")
+            assert result == []
+
+    async def test_get_events(self, dd):
+        mock_data = {"data": [{"id": "evt1"}, {"id": "evt2"}]}
+        mock_response = _make_response(200, mock_data)
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_response):
+            result = await dd.get_events("service:web", "now-1h", "now")
+            assert len(result) == 2
+
+
+class TestParseIncidentId:
+    def test_inc_format(self, dd):
+        assert dd.parse_incident_id("INC-1234") == "1234"
+
+    def test_url_format(self, dd):
+        url = "https://app.datadoghq.com/incidents/abc-def-123"
+        assert dd.parse_incident_id(url) == "abc-def-123"
+
+    def test_no_match(self, dd):
+        assert dd.parse_incident_id("nothing here") is None
+
+    def test_embedded_text(self, dd):
+        text = "Please check INC-9876 for details"
+        assert dd.parse_incident_id(text) == "9876"
+
+
+# ── Investigation Prompt Tests ────────────────────────────────────────
+
+
+class TestBuildInvestigatePrompt:
+    def test_basic_prompt(self):
+        prompt = build_investigate_prompt("CPU Alert", "High CPU on web-01")
+        assert "CPU Alert" in prompt
+        assert "High CPU on web-01" in prompt
+        assert "INVESTIGATION.md" in prompt
+        assert "datadog_helper.py" in prompt
+
+    def test_prompt_with_context(self):
+        context = "Incident INC-123: CPU spike at 14:00 UTC"
+        prompt = build_investigate_prompt("Alert", "Description", context)
+        assert "Pre-fetched Datadog data:" in prompt
+        assert context in prompt
+
+    def test_prompt_without_context(self):
+        prompt = build_investigate_prompt("Alert", "Desc", "")
+        assert "Pre-fetched Datadog data:" not in prompt
+
+
+# ── Workspace Helper Tests ────────────────────────────────────────────
+
+
+class TestWriteDatadogHelper:
+    def test_creates_file(self, tmp_path):
+        write_datadog_helper(tmp_path, "key", "app_key", "datadoghq.com")
+        helper = tmp_path / "datadog_helper.py"
+        assert helper.exists()
+        content = helper.read_text()
+        assert "search_logs" in content
+        assert "get_incident" in content
+        assert "get_monitor" in content
+        assert "search_events" in content
+
+
+class TestReadInvestigationMd:
+    def test_file_exists(self, tmp_path):
+        (tmp_path / "INVESTIGATION.md").write_text("# Report\nAll good.")
+        result = read_investigation_md(tmp_path)
+        assert result == "# Report\nAll good."
+
+    def test_file_missing(self, tmp_path):
+        result = read_investigation_md(tmp_path)
+        assert result is None

@@ -5,7 +5,7 @@ export type TaskStatus =
   | "reviewing"
   | "done"
   | "failed";
-export type RunStage = "plan" | "work" | "review";
+export type RunStage = "plan" | "work" | "review" | "investigate";
 export type RunStatus = "running" | "done" | "failed";
 export type LogType = "text" | "tool_use" | "tool_result" | "error";
 

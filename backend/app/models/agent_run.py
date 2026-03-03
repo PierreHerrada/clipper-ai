@@ -8,6 +8,7 @@ class RunStage(str, Enum):
     PLAN = "plan"
     WORK = "work"
     REVIEW = "review"
+    INVESTIGATE = "investigate"
 
 
 class RunStatus(str, Enum):
@@ -19,7 +20,7 @@ class RunStatus(str, Enum):
 class AgentRun(Model):
     id = fields.UUIDField(pk=True)
     task = fields.ForeignKeyField("models.Task", related_name="runs", on_delete=fields.CASCADE)
-    stage = fields.CharEnumField(RunStage, max_length=10)
+    stage = fields.CharEnumField(RunStage, max_length=15)
     status = fields.CharEnumField(RunStatus, default=RunStatus.RUNNING, max_length=10)
     tokens_in = fields.IntField(default=0)
     tokens_out = fields.IntField(default=0)

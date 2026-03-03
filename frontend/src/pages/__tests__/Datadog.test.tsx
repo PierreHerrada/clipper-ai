@@ -2,13 +2,24 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import Datadog from "../Datadog";
 
+const mockNavigate = vi.fn();
+vi.mock("react-router-dom", () => ({
+  useNavigate: () => mockNavigate,
+}));
+
 vi.mock("../../api/datadog", () => ({
   fetchAnalyses: vi.fn(),
   fetchAnalysis: vi.fn(),
   triggerAnalysis: vi.fn(),
+  triggerInvestigation: vi.fn(),
 }));
 
-import { fetchAnalyses, fetchAnalysis, triggerAnalysis } from "../../api/datadog";
+import {
+  fetchAnalyses,
+  fetchAnalysis,
+  triggerAnalysis,
+  triggerInvestigation,
+} from "../../api/datadog";
 
 describe("Datadog", () => {
   it("shows loading state initially", () => {
@@ -103,6 +114,40 @@ describe("Datadog", () => {
 
     await waitFor(() => {
       expect(triggerAnalysis).toHaveBeenCalledWith({ query: "service:api" });
+    });
+  });
+
+  it("renders Investigate button and triggers investigation on click", async () => {
+    vi.mocked(fetchAnalyses).mockResolvedValue({
+      total: 0,
+      offset: 0,
+      limit: 20,
+      analyses: [],
+    });
+    vi.mocked(triggerInvestigation).mockResolvedValueOnce({
+      task_id: "task-123",
+      analysis_id: "a-1",
+      run: { id: "r-1", stage: "investigate", status: "running" },
+    });
+
+    render(<Datadog />);
+    await waitFor(() => {
+      expect(screen.getByText(/No analyses yet/)).toBeInTheDocument();
+    });
+
+    const input = screen.getByPlaceholderText(/Paste a Datadog URL/);
+    fireEvent.change(input, { target: { value: "service:api status:error" } });
+
+    const btn = screen.getByText("Investigate");
+    expect(btn).toBeInTheDocument();
+    fireEvent.click(btn);
+
+    await waitFor(() => {
+      expect(triggerInvestigation).toHaveBeenCalledWith({
+        query: "service:api status:error",
+        description: "service:api status:error",
+      });
+      expect(mockNavigate).toHaveBeenCalledWith("/tasks/task-123");
     });
   });
 

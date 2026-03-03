@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchAnalyses, fetchAnalysis, triggerAnalysis } from "../api/datadog";
+import {
+  fetchAnalyses,
+  fetchAnalysis,
+  triggerAnalysis,
+  triggerInvestigation,
+} from "../api/datadog";
 import type { DatadogAnalysis } from "../types";
 
 const PAGE_SIZE = 20;
@@ -64,6 +69,20 @@ export function useDatadog() {
     }
   }, []);
 
+  const investigate = useCallback(
+    async (params: {
+      url?: string;
+      query?: string;
+      trace_id?: string;
+      incident_id?: string;
+      description?: string;
+    }): Promise<string> => {
+      const result = await triggerInvestigation(params);
+      return result.task_id;
+    },
+    [],
+  );
+
   const clearSelection = useCallback(() => {
     setSelectedAnalysis(null);
   }, []);
@@ -82,5 +101,6 @@ export function useDatadog() {
     selectedAnalysis,
     selectAnalysis,
     clearSelection,
+    investigate,
   };
 }

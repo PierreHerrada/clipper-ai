@@ -52,7 +52,7 @@ Records each agent execution (plan/work/review) with cost tracking.
 |---|---|---|---|
 | `id` | UUID | PK, auto-generated | Unique run identifier |
 | `task_id` | UUID | FK → tasks, NOT NULL | Associated task |
-| `stage` | ENUM | NOT NULL | One of: `plan`, `work`, `review` |
+| `stage` | ENUM(max_length=15) | NOT NULL | One of: `plan`, `work`, `review`, `investigate` |
 | `status` | ENUM | NOT NULL, default 'running' | One of: `running`, `done`, `failed` |
 | `tokens_in` | INT | NOT NULL, default 0 | Input tokens consumed |
 | `tokens_out` | INT | NOT NULL, default 0 | Output tokens generated |
