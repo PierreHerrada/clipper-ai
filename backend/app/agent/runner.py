@@ -113,53 +113,168 @@ _STAGE_TO_TASK_STATUS = {
 }
 
 
-def _classify_event(event: dict) -> tuple[LogType, dict]:
-    """Classify a stream-json event into a log type and content dict."""
-    event_type = event.get("type", "")
+def _summarize_tool_use(name: str, tool_input: dict) -> str:
+    """Build a human-readable one-liner for a tool call."""
+    if name in ("Read", "Write", "Edit"):
+        path = tool_input.get("file_path", "")
+        return f"{name} {path}" if path else name
+    if name == "Bash":
+        cmd = tool_input.get("command", "")
+        desc = tool_input.get("description", "")
+        label = desc or (cmd[:120] + "..." if len(cmd) > 120 else cmd)
+        return f"Bash: {label}" if label else "Bash"
+    if name in ("Grep", "Glob"):
+        pattern = tool_input.get("pattern", "")
+        return f"{name} {pattern}" if pattern else name
+    if name == "Agent":
+        desc = tool_input.get("description", tool_input.get("prompt", "")[:80])
+        return f"Agent: {desc}" if desc else "Agent"
+    return name
 
+
+def _summarize_tool_result(content: str, is_error: bool = False) -> str:
+    """Truncate tool result content for display."""
+    if not content:
+        return "(empty)" if not is_error else "(error, no output)"
+    lines = content.split("\n")
+    if len(lines) <= 3:
+        return content[:300]
+    preview = lines[0][:200]
+    return f"{preview} ... ({len(lines)} lines)"
+
+
+def _classify_event(event: dict) -> tuple[LogType, dict]:
+    """Classify a Claude Code stream-json event into a log type and content dict."""
+    event_type = event.get("type", "")
+    subtype = event.get("subtype", "")
+
+    # --- system events ---
+    if event_type == "system":
+        if subtype == "init":
+            model = event.get("model", "unknown")
+            version = event.get("claude_code_version", "?")
+            n_tools = len(event.get("tools", []))
+            return LogType.TEXT, {
+                "message": f"Claude Code v{version} initialized (model: {model}, {n_tools} tools)",
+            }
+        if subtype == "task_started":
+            desc = event.get("description", "")
+            return LogType.TEXT, {
+                "message": f"Subagent started: {desc}" if desc else "Subagent started",
+            }
+        # Other system subtypes
+        return LogType.TEXT, {"message": f"[system] {subtype or json.dumps(event)}"}
+
+    # --- assistant messages (text, thinking, tool_use) ---
     if event_type == "assistant" and "message" in event:
-        # Assistant text message
         msg = event["message"]
         content_blocks = msg.get("content", [])
-        texts = []
+
         for block in content_blocks:
-            if block.get("type") == "text":
-                texts.append(block.get("text", ""))
-        if texts:
-            return LogType.TEXT, {"message": "\n".join(texts)}
-        return LogType.TEXT, {"message": json.dumps(event)}
+            block_type = block.get("type", "")
 
+            if block_type == "text":
+                text = block.get("text", "")
+                # Check for auth / error markers
+                if event.get("error") == "authentication_failed":
+                    return LogType.ERROR, {"message": text}
+                return LogType.TEXT, {"message": text}
+
+            if block_type == "thinking":
+                thinking = block.get("thinking", "")
+                preview = thinking[:200] + "..." if len(thinking) > 200 else thinking
+                return LogType.TEXT, {"message": f"Thinking: {preview}"}
+
+            if block_type == "tool_use":
+                name = block.get("name", "unknown")
+                tool_input = block.get("input", {})
+                summary = _summarize_tool_use(name, tool_input)
+                return LogType.TOOL_USE, {
+                    "tool": name,
+                    "input": tool_input,
+                    "message": summary,
+                }
+
+        # No recognized content blocks
+        return LogType.TEXT, {"message": "(assistant message)"}
+
+    # --- user messages (tool results) ---
+    if event_type == "user" and "message" in event:
+        msg = event["message"]
+        content_items = msg.get("content", [])
+
+        for item in content_items:
+            if isinstance(item, dict) and item.get("type") == "tool_result":
+                content = item.get("content", "")
+                is_error = item.get("is_error", False)
+                summary = _summarize_tool_result(str(content), is_error)
+                log_type = LogType.ERROR if is_error else LogType.TOOL_RESULT
+                return log_type, {"message": summary}
+
+        # tool_use_result shorthand (from stream-json wrapper)
+        result_text = event.get("tool_use_result", "")
+        if isinstance(result_text, dict):
+            stdout = result_text.get("stdout", "")
+            stderr = result_text.get("stderr", "")
+            content = stdout or stderr
+            summary = _summarize_tool_result(content, bool(stderr and not stdout))
+            return LogType.TOOL_RESULT, {"message": summary}
+        if result_text:
+            return LogType.TOOL_RESULT, {
+                "message": _summarize_tool_result(str(result_text)),
+            }
+
+        return LogType.TOOL_RESULT, {"message": "(result)"}
+
+    # --- top-level tool_use (older format) ---
     if event_type == "tool_use":
+        name = event.get("tool", event.get("name", "unknown"))
+        tool_input = event.get("input", {})
+        summary = _summarize_tool_use(name, tool_input)
         return LogType.TOOL_USE, {
-            "tool": event.get("tool", event.get("name", "unknown")),
-            "input": event.get("input", {}),
-            "message": f"Tool: {event.get('tool', event.get('name', 'unknown'))}",
+            "tool": name,
+            "input": tool_input,
+            "message": summary,
         }
 
+    # --- top-level tool_result (older format) ---
     if event_type == "tool_result":
-        return LogType.TOOL_RESULT, {
-            "tool": event.get("tool", event.get("name", "unknown")),
-            "output": event.get("output", ""),
-            "message": f"Result: {event.get('tool', event.get('name', 'unknown'))}",
-        }
+        content = event.get("output", event.get("content", ""))
+        is_error = event.get("is_error", False)
+        summary = _summarize_tool_result(str(content), is_error)
+        return LogType.ERROR if is_error else LogType.TOOL_RESULT, {"message": summary}
 
+    # --- error ---
     if event_type == "error":
         return LogType.ERROR, {
             "message": event.get("error", {}).get("message", json.dumps(event)),
         }
 
+    # --- result (final summary) ---
     if event_type == "result":
-        # Final result event with cost info
-        return LogType.TEXT, {
-            "message": "Run completed",
+        usage = event.get("usage", {})
+        tokens_in = event.get("num_input_tokens", usage.get("input_tokens", 0))
+        tokens_out = event.get("num_output_tokens", usage.get("output_tokens", 0))
+        duration = event.get("duration_ms", 0)
+        cost = event.get("total_cost_usd", event.get("cost_usd"))
+        duration_s = f"{duration / 1000:.1f}s" if duration else "?"
+        cost_str = f"${cost:.4f}" if cost else "?"
+        is_error = event.get("is_error", False)
+        msg = (
+            f"Completed in {duration_s} — "
+            f"Tokens: {tokens_in:,} in / {tokens_out:,} out — "
+            f"Cost: {cost_str}"
+        )
+        return (LogType.ERROR if is_error else LogType.TEXT), {
+            "message": msg,
             "is_result": True,
-            "cost": event.get("cost_usd"),
-            "duration": event.get("duration_ms"),
-            "tokens_in": event.get("num_input_tokens", event.get("usage", {}).get("input_tokens", 0)),
-            "tokens_out": event.get("num_output_tokens", event.get("usage", {}).get("output_tokens", 0)),
+            "cost": cost,
+            "duration": duration,
+            "tokens_in": tokens_in,
+            "tokens_out": tokens_out,
         }
 
-    # Fallback: store as text
+    # Fallback
     return LogType.TEXT, {"message": json.dumps(event)}
 
 
