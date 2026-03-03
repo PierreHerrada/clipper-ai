@@ -176,10 +176,20 @@ async def run_agent(
     existing_run: Optional[AgentRun] = None,
 ) -> AgentRun:
     """Execute Claude Code CLI for a given task and stage."""
+    logger.info(
+        "=== Agent run starting === task=%s stage=%s repo=%s",
+        task.id, stage.value, task.repo,
+    )
+
     # Gate: reject if task targets a repo that isn't enabled
     if task.repo:
         enabled_repos = await _get_enabled_repos()
+        logger.info("Enabled repos: %s", enabled_repos)
         if enabled_repos and task.repo not in enabled_repos:
+            logger.warning(
+                "Repo '%s' is not enabled — rejecting run for task %s",
+                task.repo, task.id,
+            )
             run = existing_run or await AgentRun.create(
                 id=uuid.uuid4(),
                 task=task,
@@ -200,6 +210,7 @@ async def run_agent(
 
     if existing_run is not None:
         run = existing_run
+        logger.info("Reusing existing run %s", run.id)
     else:
         run = await AgentRun.create(
             id=uuid.uuid4(),
@@ -207,52 +218,78 @@ async def run_agent(
             stage=stage,
             status=RunStatus.RUNNING,
         )
+        logger.info("Created new run %s", run.id)
 
     run_id_str = str(run.id)
     prompt = _build_prompt(task, stage)
     base_prompt = await _get_base_prompt()
     if base_prompt:
         prompt = base_prompt + "\n\n" + prompt
+        logger.info("Base prompt prepended (%d chars)", len(base_prompt))
     cwd = repo_path or os.getcwd()
+    logger.info(
+        "Launching Claude CLI — run=%s cwd=%s prompt_length=%d",
+        run.id, cwd, len(prompt),
+    )
 
     tokens_in = 0
     tokens_out = 0
+    event_count = 0
 
     try:
-        process = await asyncio.create_subprocess_exec(
+        cmd = [
             "claude",
             "--output-format", "stream-json",
             "--verbose",
             "--dangerously-skip-permissions",
             "--max-turns", "200",
             "-p", prompt,
+        ]
+        logger.info("Subprocess command: %s", " ".join(cmd[:7]) + " -p <prompt>")
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
             cwd=cwd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env={**os.environ, "ANTHROPIC_API_KEY": settings.anthropic_api_key},
         )
         _active_processes[run_id_str] = process
+        logger.info("Claude CLI process started — pid=%s run=%s", process.pid, run.id)
 
         # Stream stdout line by line — each line is a JSON event
         async for line in process.stdout:
             decoded = line.decode().rstrip()
             if not decoded:
                 continue
+            event_count += 1
             try:
                 event = json.loads(decoded)
             except json.JSONDecodeError:
-                # Non-JSON output — store as plain text
+                logger.warning(
+                    "Non-JSON output from CLI (run=%s): %s",
+                    run.id, decoded[:200],
+                )
                 log = await save_log(run.id, {"message": decoded})
                 if ws_broadcast:
                     await ws_broadcast(str(run.id), log)
                 continue
 
             log_type, content = _classify_event(event)
+            logger.info(
+                "Event #%d run=%s type=%s: %s",
+                event_count, run.id, log_type.value,
+                content.get("message", "")[:150],
+            )
 
             # Extract token usage from result events
             if content.get("is_result"):
                 tokens_in = content.get("tokens_in", 0)
                 tokens_out = content.get("tokens_out", 0)
+                logger.info(
+                    "Result event — tokens_in=%d tokens_out=%d run=%s",
+                    tokens_in, tokens_out, run.id,
+                )
 
             log = await save_log(run.id, content, log_type)
             if ws_broadcast:
@@ -260,12 +297,32 @@ async def run_agent(
 
         await process.wait()
 
+        # Always capture stderr
+        stderr_output = ""
+        if process.stderr:
+            stderr_output = (await process.stderr.read()).decode().strip()
+        if stderr_output:
+            logger.warning(
+                "CLI stderr (run=%s, exit=%d):\n%s",
+                run.id, process.returncode, stderr_output[:2000],
+            )
+
+        logger.info(
+            "Claude CLI exited — run=%s pid=%s returncode=%d events=%d",
+            run.id, process.pid, process.returncode, event_count,
+        )
+
         # Compute cost
         cost = (Decimal(tokens_in) / 1_000_000 * INPUT_PRICE_PER_M) + (
             Decimal(tokens_out) / 1_000_000 * OUTPUT_PRICE_PER_M
         )
 
         if process.returncode == 0:
+            logger.info(
+                "=== Agent run succeeded === run=%s task=%s stage=%s "
+                "tokens_in=%d tokens_out=%d cost=$%.4f",
+                run.id, task.id, stage.value, tokens_in, tokens_out, float(cost),
+            )
             await update_run_cost(run.id, tokens_in, tokens_out, float(cost))
             new_status = _STAGE_TO_TASK_STATUS.get(stage)
             if new_status:
@@ -273,6 +330,12 @@ async def run_agent(
             await _notify_run_complete(task, stage, success=True)
         else:
             stopped_by_user = run_id_str in _stopped_runs
+            logger.error(
+                "=== Agent run failed === run=%s task=%s stage=%s "
+                "returncode=%d stopped_by_user=%s",
+                run.id, task.id, stage.value,
+                process.returncode, stopped_by_user,
+            )
             await AgentRun.filter(id=run.id).update(
                 status=RunStatus.FAILED,
                 tokens_in=tokens_in,
@@ -281,7 +344,6 @@ async def run_agent(
                 finished_at=datetime.now(timezone.utc),
             )
             if stopped_by_user:
-                # User stopped: don't set task to FAILED, leave at current status
                 _stopped_runs.discard(run_id_str)
                 await save_log(
                     run.id,
@@ -291,7 +353,6 @@ async def run_agent(
                 logger.info("Run %s stopped by user for task %s", run.id, task.id)
             else:
                 await Task.filter(id=task.id).update(status=TaskStatus.FAILED)
-                stderr_output = (await process.stderr.read()).decode()
                 await save_log(
                     run.id,
                     {"message": f"Process exited with code {process.returncode}\n{stderr_output}"},
@@ -300,7 +361,10 @@ async def run_agent(
             await _notify_run_complete(task, stage, success=False)
 
     except Exception as e:
-        logger.exception("Agent run failed for task %s stage %s", task.id, stage)
+        logger.exception(
+            "=== Agent run exception === task=%s stage=%s error=%s",
+            task.id, stage.value, e,
+        )
         stopped_by_user = run_id_str in _stopped_runs
         await AgentRun.filter(id=run.id).update(
             status=RunStatus.FAILED,
@@ -315,5 +379,6 @@ async def run_agent(
         await _notify_run_complete(task, stage, success=False)
     finally:
         _active_processes.pop(run_id_str, None)
+        logger.info("=== Agent run cleanup done === run=%s task=%s", run_id_str, task.id)
 
     return await AgentRun.get(id=run.id)
