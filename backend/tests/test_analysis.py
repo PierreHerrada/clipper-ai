@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
 
 from app.agent.analysis import _call_anthropic, _post_analysis_notifications, analyze_task
-from app.models import ChatMessage, Task, TaskStatus
+from app.models import ChatMessage, Task
 
 
 def _make_response(status_code: int, json_data: dict) -> httpx.Response:
@@ -77,7 +77,11 @@ class TestAnalyzeTask:
         with patch("app.agent.analysis._call_anthropic", new_callable=AsyncMock) as mock_api:
             mock_api.return_value = "Analysis text"
 
-            with patch("app.agent.analysis._post_analysis_notifications", new_callable=AsyncMock) as mock_notify:
+            notify_patch = patch(
+                "app.agent.analysis._post_analysis_notifications",
+                new_callable=AsyncMock,
+            )
+            with notify_patch as mock_notify:
                 await analyze_task(sample_task)
                 mock_notify.assert_called_once_with(sample_task, "Analysis text")
 

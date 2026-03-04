@@ -130,8 +130,6 @@ class TestCloneRepo:
 
         chowned_paths = []
 
-        original_chown = os.chown
-
         def tracking_chown(path, uid, gid):
             chowned_paths.append(path)
 

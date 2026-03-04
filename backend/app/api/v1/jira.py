@@ -31,7 +31,7 @@ async def import_issue(body: JiraImportRequest) -> dict:
     """Fetch a Jira issue by key and add it to the board if not already present."""
     jira = _get_jira()
 
-    # Check if already in the board (active only — soft-deleted will be restored by import_jira_issue)
+    # Active only — soft-deleted will be restored by import_jira_issue
     existing = await Task.filter(jira_key=body.issue_key, deleted_at=None).first()
     if existing:
         return {"status": "exists", "task_id": str(existing.id), "jira_key": body.issue_key}
@@ -46,7 +46,8 @@ async def import_issue(body: JiraImportRequest) -> dict:
     if task is None:
         # Race condition: created between the check and import
         existing = await Task.filter(jira_key=body.issue_key).first()
-        return {"status": "exists", "task_id": str(existing.id) if existing else None, "jira_key": body.issue_key}
+        task_id = str(existing.id) if existing else None
+        return {"status": "exists", "task_id": task_id, "jira_key": body.issue_key}
 
     logger.info("Jira import: imported %s as task %s", body.issue_key, task.id)
     return {"status": "created", "task_id": str(task.id), "jira_key": body.issue_key}

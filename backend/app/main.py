@@ -106,7 +106,7 @@ def create_app() -> FastAPI:
         logger.info("Corsair shutting down — marking active agent runs as failed")
 
         from app.integrations.jira.sync import stop_sync
-        from app.models import AgentRun, RunStatus, Task, TaskStatus
+        from app.models import AgentRun, RunStatus, TaskStatus
 
         stop_sync()
 

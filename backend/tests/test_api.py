@@ -197,9 +197,11 @@ class TestTasksEndpoints:
             )
             assert resp.status_code == 201
 
-    async def test_stop_task_process_not_in_registry(self, client, auth_headers, sample_task, sample_run):
-        """Active run in DB but process not in registry (e.g. container restart) — should mark as failed."""
-        from app.models import RunStatus, TaskStatus, Task
+    async def test_stop_task_process_not_in_registry(
+        self, client, auth_headers, sample_task, sample_run
+    ):
+        """Active run in DB but process not in registry."""
+        from app.models import RunStatus, Task, TaskStatus
 
         with patch("app.api.v1.tasks.stop_run", return_value=False):
             resp = await client.post(

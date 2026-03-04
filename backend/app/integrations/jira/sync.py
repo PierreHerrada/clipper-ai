@@ -136,7 +136,10 @@ async def push_board_tasks_to_jira(jira: JiraIntegration) -> int:
 
 
 async def import_jira_issue(issue: dict) -> Optional[Task]:
-    """Import a single Jira issue dict into the board. Returns the Task if created/restored, None if it already exists."""
+    """Import a single Jira issue dict into the board.
+
+    Returns the Task if created/restored, None if it already exists.
+    """
     key = issue["key"]
     existing = await Task.filter(jira_key=key).first()
     if existing:

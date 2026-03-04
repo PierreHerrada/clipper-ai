@@ -122,8 +122,14 @@ class SlackIntegration(BaseIntegration):
 
             clean_text = re.sub(r"<@[A-Z0-9]+>\s*", "", text).strip()
             if not clean_text:
-                logger.warning("Slack bot: empty mention from user=%s, skipping task creation", user_id)
-                await say(text="Please include a task description after the mention.", thread_ts=slack_ts)
+                logger.warning(
+                    "Slack bot: empty mention from user=%s, skipping task creation",
+                    user_id,
+                )
+                await say(
+                    text="Please include a task description after the mention.",
+                    thread_ts=slack_ts,
+                )
                 return
 
             title = clean_text[:120]
@@ -166,8 +172,8 @@ class SlackIntegration(BaseIntegration):
             # Create a matching Jira issue if Jira is configured
             jira_msg = ""
             try:
-                from app.integrations.registry import IntegrationRegistry
                 from app.integrations.jira.client import JiraIntegration
+                from app.integrations.registry import IntegrationRegistry
 
                 jira = IntegrationRegistry.get("jira")
                 if jira is not None and isinstance(jira, JiraIntegration):

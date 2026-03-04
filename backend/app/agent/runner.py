@@ -673,7 +673,11 @@ async def run_agent(
         sub_env = {
             **os.environ,
             "ANTHROPIC_API_KEY": settings.anthropic_api_key,
-            "HOME": pwd.getpwnam("corsair").pw_dir if os.getuid() == 0 else os.environ.get("HOME", ""),
+            "HOME": (
+                pwd.getpwnam("corsair").pw_dir
+                if os.getuid() == 0
+                else os.environ.get("HOME", "")
+            ),
         }
         if stage == RunStage.INVESTIGATE:
             sub_env["DD_API_KEY"] = settings.dd_api_key
@@ -888,7 +892,8 @@ async def run_agent(
             if tokens_in or tokens_out:
                 await _emit(
                     run.id,
-                    f"Tokens used before failure: {tokens_in:,} in / {tokens_out:,} out — Cost: ${float(cost):.4f}",
+                    f"Tokens used before failure: {tokens_in:,} in / "
+                    f"{tokens_out:,} out — Cost: ${float(cost):.4f}",
                     ws_broadcast,
                 )
 

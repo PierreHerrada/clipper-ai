@@ -5,8 +5,6 @@ from decimal import Decimal
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from app.agent.cost import TokenUsage, parse_claude_code_usage
 from app.agent.prompts import build_plan_prompt, build_review_prompt, build_work_prompt
 from app.agent.runner import (
@@ -20,7 +18,17 @@ from app.agent.runner import (
     save_log,
     stop_run,
 )
-from app.models import AgentLog, AgentRun, LogType, Repository, RunStage, RunStatus, Setting, Task, TaskStatus
+from app.models import (
+    AgentLog,
+    AgentRun,
+    LogType,
+    Repository,
+    RunStage,
+    RunStatus,
+    Setting,
+    Task,
+    TaskStatus,
+)
 from app.websocket.manager import ConnectionManager
 
 
@@ -514,7 +522,6 @@ class TestStopRun:
 
     async def test_stopped_run_does_not_fail_task(self, sample_task):
         """When a run is stopped by user, task status should NOT change to FAILED."""
-        import json
 
         mock_process = AsyncMock()
         mock_process.stdout = AsyncIteratorMock([])
@@ -523,13 +530,11 @@ class TestStopRun:
         mock_process.wait = AsyncMock(return_value=None)
         mock_process.returncode = -15  # SIGTERM
 
-        original_status = sample_task.status
-
         with patch("asyncio.create_subprocess_exec", return_value=mock_process):
             # Pre-register the run as stopped — we need to know the run ID
             # so we patch _stopped_runs after run creation
             with patch("app.agent.runner._stopped_runs", new=set()) as stopped:
-                with patch("app.agent.runner._active_processes", new={}) as active:
+                with patch("app.agent.runner._active_processes", new={}):
                     # We need to intercept the run_id after creation
                     original_create = AgentRun.create
 

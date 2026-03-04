@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
-
-from datetime import datetime, timezone
 
 from app.agent.runner import run_agent, stop_run
 from app.models import AgentLog, AgentRun, RunStage, RunStatus, Task, TaskStatus
@@ -159,7 +157,10 @@ async def retry_task(task_id: str) -> dict:
                     task.id, task.jira_key, jira_status_name, new_status.value,
                 )
         except Exception:
-            logger.exception("Retry task %s: failed to fetch Jira status, defaulting to backlog", task.id)
+            logger.exception(
+                "Retry task %s: failed to fetch Jira status, defaulting to backlog",
+                task.id,
+            )
 
     task.status = new_status
     await task.save()

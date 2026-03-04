@@ -92,11 +92,20 @@ class TestJiraIntegration:
         )
         transition_response = _make_response(204)
 
-        with (
-            patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=transitions_response),
-            patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=transition_response),
-            patch.object(jira, "_get_base_url", return_value="https://test.atlassian.net"),
-        ):
+        get_patch = patch(
+            "httpx.AsyncClient.get",
+            new_callable=AsyncMock,
+            return_value=transitions_response,
+        )
+        post_patch = patch(
+            "httpx.AsyncClient.post",
+            new_callable=AsyncMock,
+            return_value=transition_response,
+        )
+        base_patch = patch.object(
+            jira, "_get_base_url", return_value="https://test.atlassian.net"
+        )
+        with get_patch, post_patch, base_patch:
             result = await jira.update_status("SWE-123", "Done")
             assert result is True
 
@@ -105,9 +114,17 @@ class TestJiraIntegration:
             200,
             {"transitions": [{"id": "21", "name": "In Progress"}]},
         )
+        get_patch = patch(
+            "httpx.AsyncClient.get",
+            new_callable=AsyncMock,
+            return_value=transitions_response,
+        )
+        base_patch = patch.object(
+            jira, "_get_base_url", return_value="https://test.atlassian.net"
+        )
         with (
-            patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=transitions_response),
-            patch.object(jira, "_get_base_url", return_value="https://test.atlassian.net"),
+            get_patch,
+            base_patch,
         ):
             result = await jira.update_status("SWE-123", "Nonexistent")
             assert result is False
