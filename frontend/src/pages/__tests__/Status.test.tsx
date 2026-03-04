@@ -6,6 +6,17 @@ import Status from "../Status";
 vi.mock("../../api/agent", () => ({
   fetchIntegrations: vi.fn(),
   fetchIntegrationHealth: vi.fn(),
+  fetchJiraStatusDefaults: vi.fn().mockResolvedValue({
+    "to do": "backlog",
+    "in progress": "working",
+    done: "done",
+  }),
+}));
+
+vi.mock("../../api/settings", () => ({
+  fetchSetting: vi.fn().mockResolvedValue({ value: "", updated_at: null }),
+  updateSetting: vi.fn().mockResolvedValue({ value: "", updated_at: null }),
+  fetchSettingHistory: vi.fn().mockResolvedValue({ total: 0, offset: 0, limit: 50, entries: [] }),
 }));
 
 import { fetchIntegrationHealth, fetchIntegrations } from "../../api/agent";

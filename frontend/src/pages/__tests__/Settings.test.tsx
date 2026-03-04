@@ -251,9 +251,16 @@ describe("Settings", () => {
     });
     render(<Settings />);
     await waitFor(() => {
-      expect(screen.getByRole("switch")).toBeInTheDocument();
+      expect(screen.getAllByRole("switch").length).toBeGreaterThanOrEqual(1);
     });
-    await userEvent.click(screen.getByRole("switch"));
+    // Find the repo toggle switch (inside the Repositories section)
+    const switches = screen.getAllByRole("switch");
+    const repoSwitch = switches.find((s) => {
+      const row = s.closest("tr");
+      return row !== null;
+    });
+    expect(repoSwitch).toBeDefined();
+    await userEvent.click(repoSwitch!);
     await waitFor(() => {
       expect(toggleRepository).toHaveBeenCalledWith("repo-1", true);
     });
@@ -377,6 +384,44 @@ describe("Settings", () => {
     await userEvent.click(saveButtons[1]);
     await waitFor(() => {
       expect(updateSetting).toHaveBeenCalledWith("max_active_agents", "5");
+    });
+  });
+
+  it("renders auto work toggle", async () => {
+    mockDefaults();
+    render(<Settings />);
+    await waitFor(() => {
+      expect(screen.getByText("Auto Work")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          /Automatically trigger the work stage when a plan completes/,
+        ),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("toggles auto work on click", async () => {
+    mockDefaults();
+    vi.mocked(updateSetting).mockResolvedValue({
+      key: "auto_work",
+      value: "true",
+      updated_at: "2026-03-02T12:00:00Z",
+    });
+    render(<Settings />);
+    await waitFor(() => {
+      expect(screen.getByText("Auto Work")).toBeInTheDocument();
+    });
+    // Find the auto work toggle switch
+    const switches = screen.getAllByRole("switch");
+    // The auto work switch — find by checking parent context
+    const autoWorkSwitch = switches.find((s) => {
+      const parent = s.closest(".bg-abyss");
+      return parent?.textContent?.includes("Auto Work");
+    });
+    expect(autoWorkSwitch).toBeDefined();
+    await userEvent.click(autoWorkSwitch!);
+    await waitFor(() => {
+      expect(updateSetting).toHaveBeenCalledWith("auto_work", "true");
     });
   });
 

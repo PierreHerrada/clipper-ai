@@ -29,6 +29,7 @@ def build_work_prompt(
     task_repo: Optional[str] = None,
     title: str = "",
     description: str = "",
+    jira_key: Optional[str] = None,
 ) -> str:
     repo_hint = ""
     if task_repo:
@@ -43,12 +44,31 @@ def build_work_prompt(
     if description:
         ticket_context += f"\nDescription: {description}"
 
+    if jira_key:
+        branch_instruction = (
+            f"1. Create a new branch from the current branch. "
+            f"The branch name MUST follow this format: `corsair/{jira_key}/<type>/<short-kebab-description>` "
+            f"where <type> is one of: feat, fix, refactor, chore, docs, test "
+            f"(pick the one that best describes the work), and <short-kebab-description> is a brief "
+            f"kebab-case summary of the task (or subtask if there are multiple PRs). "
+            f"Example: `corsair/PROJ-42/feat/add-user-auth`, `corsair/PROJ-42/fix/null-pointer-crash`."
+        )
+    else:
+        branch_instruction = (
+            "1. Create a new branch from the current branch. "
+            "The branch name MUST follow this format: `corsair/<type>/<short-kebab-description>` "
+            "where <type> is one of: feat, fix, refactor, chore, docs, test "
+            "(pick the one that best describes the work), and <short-kebab-description> is a brief "
+            "kebab-case summary of the task. "
+            "Example: `corsair/feat/add-user-auth`, `corsair/fix/null-pointer-crash`."
+        )
+
     return f"""You are a senior software engineer.
 Implement the plan in PLAN.md exactly.
 Write clean, well-tested code.
 
 Git workflow (follow these steps exactly):
-1. Create a new branch from the current branch. The branch name MUST start with `corsair/` followed by `feat/` or `fix/` and a short kebab-case description (e.g. `corsair/feat/add-user-auth`, `corsair/fix/null-pointer-crash`).
+{branch_instruction}
 2. Commit your changes with descriptive commit messages.
 3. Push the branch to the remote: `git push -u origin <branch-name>`.
 4. Open a Pull Request on GitHub with a clear title and summary of changes. Base branch: main.

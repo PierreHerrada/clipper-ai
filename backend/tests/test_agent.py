@@ -8,9 +8,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from app.agent.cost import TokenUsage, parse_claude_code_usage
 from app.agent.prompts import build_plan_prompt, build_review_prompt, build_work_prompt
 from app.agent.runner import (
+    _FUNNY_WORDS,
     _active_processes,
     _build_work_slack_message,
-    _FUNNY_WORDS,
     _get_base_prompt,
     _get_enabled_repos,
     _get_setting_value,
@@ -112,6 +112,10 @@ class TestPrompts:
         assert "git push" in prompt
         assert "Pull Request" in prompt
         assert "PR_URL.txt" in prompt
+
+    def test_work_prompt_with_jira_key(self):
+        prompt = build_work_prompt(jira_key="SWE-42")
+        assert "corsair/SWE-42" in prompt
 
     def test_review_prompt(self):
         prompt = build_review_prompt("SWE-123", "Fix bug", "https://jira.com/SWE-123")
@@ -1263,3 +1267,149 @@ class TestRunAgentWorkspaceSkillsSubagentsLessons:
 
         entries = await SettingHistory.filter(setting_key="lessons").all()
         assert len(entries) == 0
+
+
+def _make_success_process(stdout_events=None):
+    """Helper to create a mock subprocess that exits successfully."""
+    import json as _json
+
+    if stdout_events is None:
+        stdout_events = [
+            _json.dumps({
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "Plan output"}]},
+            }),
+            _json.dumps({
+                "type": "result",
+                "num_input_tokens": 100,
+                "num_output_tokens": 50,
+            }),
+        ]
+    mock_process = AsyncMock()
+    mock_process.stdout = AsyncIteratorMock(
+        [e.encode() + b"\n" for e in stdout_events]
+    )
+    mock_process.stderr = AsyncMock()
+    mock_process.stderr.read = AsyncMock(return_value=b"")
+    mock_process.wait = AsyncMock(return_value=None)
+    mock_process.returncode = 0
+    mock_process.pid = 12345
+    return mock_process
+
+
+class TestAutoWork:
+    """Tests for auto-work: automatically triggering work stage after plan success."""
+
+    async def test_auto_work_task_true_triggers_work(self, sample_task):
+        """When task.auto_work=True, work stage should be triggered after plan success."""
+        sample_task.auto_work = True
+        sample_task.repo = "org/my-app"
+        await sample_task.save()
+
+        await Repository.create(
+            id=uuid.uuid4(), full_name="org/my-app", name="my-app", enabled=True,
+        )
+
+        mock_process = _make_success_process()
+        ws = Path("/tmp/fake-workspace")
+        clone_rv = {"org/my-app": ws / "org--my-app"}
+
+        with patch("app.agent.runner.create_workspace") as mock_create_ws, \
+             patch("app.agent.runner.clone_all_repos", return_value=clone_rv), \
+             patch("app.agent.runner.write_claude_md"), \
+             patch("app.agent.runner.write_plan_md"), \
+             patch("app.agent.runner.capture_file_tree", return_value=[]), \
+             patch("os.path.isdir", return_value=True), \
+             patch("app.agent.runner.read_lessons_md", return_value=None), \
+             patch("asyncio.create_subprocess_exec", return_value=mock_process) as mock_exec:
+            mock_create_ws.return_value = ws
+
+            await run_agent(sample_task, RunStage.PLAN)
+
+            # Should have been called twice: once for plan, once for work
+            assert mock_exec.call_count == 2
+
+    async def test_auto_work_global_true_triggers_work(self, sample_task):
+        """When task.auto_work=None and global setting is 'true', work should trigger."""
+        sample_task.repo = "org/my-app"
+        await sample_task.save()
+        assert sample_task.auto_work is None
+
+        await Repository.create(
+            id=uuid.uuid4(), full_name="org/my-app", name="my-app", enabled=True,
+        )
+        await Setting.create(id=uuid.uuid4(), key="auto_work", value="true")
+
+        mock_process = _make_success_process()
+        ws = Path("/tmp/fake-workspace")
+        clone_rv = {"org/my-app": ws / "org--my-app"}
+
+        with patch("app.agent.runner.create_workspace") as mock_create_ws, \
+             patch("app.agent.runner.clone_all_repos", return_value=clone_rv), \
+             patch("app.agent.runner.write_claude_md"), \
+             patch("app.agent.runner.write_plan_md"), \
+             patch("app.agent.runner.capture_file_tree", return_value=[]), \
+             patch("os.path.isdir", return_value=True), \
+             patch("app.agent.runner.read_lessons_md", return_value=None), \
+             patch("asyncio.create_subprocess_exec", return_value=mock_process) as mock_exec:
+            mock_create_ws.return_value = ws
+
+            await run_agent(sample_task, RunStage.PLAN)
+
+            assert mock_exec.call_count == 2
+
+    async def test_auto_work_task_false_overrides_global(self, sample_task):
+        """When task.auto_work=False, work should NOT trigger even if global is true."""
+        sample_task.auto_work = False
+        sample_task.repo = "org/my-app"
+        await sample_task.save()
+
+        await Repository.create(
+            id=uuid.uuid4(), full_name="org/my-app", name="my-app", enabled=True,
+        )
+        await Setting.create(id=uuid.uuid4(), key="auto_work", value="true")
+
+        mock_process = _make_success_process()
+        ws = Path("/tmp/fake-workspace")
+        clone_rv = {"org/my-app": ws / "org--my-app"}
+
+        with patch("app.agent.runner.create_workspace") as mock_create_ws, \
+             patch("app.agent.runner.clone_all_repos", return_value=clone_rv), \
+             patch("app.agent.runner.write_claude_md"), \
+             patch("app.agent.runner.capture_file_tree", return_value=[]), \
+             patch("os.path.isdir", return_value=True), \
+             patch("app.agent.runner.read_lessons_md", return_value=None), \
+             patch("asyncio.create_subprocess_exec", return_value=mock_process) as mock_exec:
+            mock_create_ws.return_value = ws
+
+            await run_agent(sample_task, RunStage.PLAN)
+
+            # Should only be called once (plan only, no auto-work)
+            assert mock_exec.call_count == 1
+
+    async def test_auto_work_no_global_no_trigger(self, sample_task):
+        """When task.auto_work=None and no global setting, work should NOT trigger."""
+        sample_task.repo = "org/my-app"
+        await sample_task.save()
+        assert sample_task.auto_work is None
+
+        await Repository.create(
+            id=uuid.uuid4(), full_name="org/my-app", name="my-app", enabled=True,
+        )
+
+        mock_process = _make_success_process()
+        ws = Path("/tmp/fake-workspace")
+        clone_rv = {"org/my-app": ws / "org--my-app"}
+
+        with patch("app.agent.runner.create_workspace") as mock_create_ws, \
+             patch("app.agent.runner.clone_all_repos", return_value=clone_rv), \
+             patch("app.agent.runner.write_claude_md"), \
+             patch("app.agent.runner.capture_file_tree", return_value=[]), \
+             patch("os.path.isdir", return_value=True), \
+             patch("app.agent.runner.read_lessons_md", return_value=None), \
+             patch("asyncio.create_subprocess_exec", return_value=mock_process) as mock_exec:
+            mock_create_ws.return_value = ws
+
+            await run_agent(sample_task, RunStage.PLAN)
+
+            assert mock_exec.call_count == 1

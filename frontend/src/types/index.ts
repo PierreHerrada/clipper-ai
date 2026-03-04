@@ -21,6 +21,7 @@ export interface Task {
   pr_url: string | null;
   pr_number: number | null;
   repo: string | null;
+  auto_work: boolean | null;
   analysis: string;
   created_at: string;
   latest_run: AgentRun | null;
@@ -59,6 +60,7 @@ export interface DashboardStats {
   active_runs: number;
   tasks_by_status: Record<TaskStatus, number>;
   cost_by_stage: Record<RunStage, number>;
+  completed_today: number;
 }
 
 export interface CostBreakdown {

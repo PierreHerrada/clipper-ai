@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { fetchTask, fetchTaskRuns, updateTaskStatus, type RunWithLogs } from "../api/tasks";
+import { fetchTask, fetchTaskRuns, updateTaskAutoWork, updateTaskStatus, type RunWithLogs } from "../api/tasks";
 import { useWebSocket } from "../hooks/useWebSocket";
 import AgentLogViewer from "../components/AgentLogViewer";
 import FileTreeViewer from "../components/FileTreeViewer";
@@ -13,7 +13,6 @@ const STATUS_STYLES: Record<string, string> = {
   working: "bg-gold/20 text-gold",
   reviewing: "bg-sky/20 text-sky",
   done: "bg-teal/20 text-teal",
-  failed: "bg-coral/20 text-coral",
 };
 
 const RUN_STATUS_STYLES: Record<string, string> = {
@@ -120,7 +119,7 @@ export default function TaskDetail() {
                 className={`text-xs px-2 py-0.5 rounded-full border-0 cursor-pointer appearance-none bg-transparent ${STATUS_STYLES[task.status]}`}
                 style={{ paddingRight: "1.25rem", backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%239ca3af'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.35rem center" }}
               >
-                {(["backlog", "planned", "working", "reviewing", "done", "failed"] as TaskStatus[]).map((s) => (
+                {(["backlog", "planned", "working", "reviewing", "done"] as TaskStatus[]).map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
@@ -146,7 +145,30 @@ export default function TaskDetail() {
               )}
             </div>
           </div>
-          <StageControls task={task} onRefresh={refresh} />
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-mist/70">Auto Work:</label>
+              <select
+                value={task.auto_work === null ? "default" : task.auto_work ? "on" : "off"}
+                onChange={async (e) => {
+                  const val = e.target.value;
+                  const autoWork = val === "default" ? null : val === "on";
+                  try {
+                    const updated = await updateTaskAutoWork(task.id, autoWork);
+                    setTask(updated);
+                  } catch {
+                    // revert on failure
+                  }
+                }}
+                className="text-xs bg-deep border border-foam/20 rounded px-2 py-1 text-mist cursor-pointer focus:outline-none focus:border-foam/50"
+              >
+                <option value="default">Default</option>
+                <option value="on">On</option>
+                <option value="off">Off</option>
+              </select>
+            </div>
+            <StageControls task={task} onRefresh={refresh} />
+          </div>
         </div>
 
         {task.description && (

@@ -6,6 +6,7 @@ import TaskBoard from "../TaskBoard";
 
 vi.mock("../../api/tasks", () => ({
   triggerStage: vi.fn(),
+  updateTaskStatus: vi.fn(),
 }));
 
 function makeTask(overrides: Partial<Task> = {}): Task {

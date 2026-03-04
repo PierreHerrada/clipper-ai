@@ -1,3 +1,4 @@
+import { DndContext } from "@dnd-kit/core";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
@@ -29,7 +30,11 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 }
 
 function renderWithRouter(ui: React.ReactElement) {
-  return render(<MemoryRouter>{ui}</MemoryRouter>);
+  return render(
+    <MemoryRouter>
+      <DndContext>{ui}</DndContext>
+    </MemoryRouter>,
+  );
 }
 
 describe("TaskCard", () => {
@@ -107,5 +112,11 @@ describe("TaskCard", () => {
     );
     expect(screen.getByText(/Last run: plan/)).toBeInTheDocument();
     expect(screen.getByText(/\$0\.0045/)).toBeInTheDocument();
+  });
+
+  it("has draggable attributes on the card", () => {
+    renderWithRouter(<TaskCard task={makeTask()} onRefresh={vi.fn()} />);
+    const card = screen.getByText("Fix login bug").closest("[role='button']");
+    expect(card).toBeInTheDocument();
   });
 });

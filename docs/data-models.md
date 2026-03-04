@@ -24,6 +24,7 @@ Tracks each engineering task from Slack through completion.
 | `repo` | TEXT | NULLABLE | GitHub repository (e.g., org/repo-name) |
 | `plan` | TEXT | NOT NULL, default '' | Plan text from the PLAN stage |
 | `analysis` | TEXT | NOT NULL, default '' | Auto-generated task analysis |
+| `auto_work` | BOOLEAN | NULLABLE, default NULL | Per-task auto-run override (true/false/null=global default) |
 | `created_at` | TIMESTAMPTZ | NOT NULL, auto | Record creation time |
 | `updated_at` | TIMESTAMPTZ | NOT NULL, auto-update | Last modification time |
 

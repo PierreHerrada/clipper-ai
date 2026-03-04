@@ -41,6 +41,19 @@ export async function updateTaskRepo(
   return resp.json();
 }
 
+export async function updateTaskAutoWork(
+  id: string,
+  autoWork: boolean | null
+): Promise<Task> {
+  const resp = await apiFetch(`${BASE}/tasks/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ auto_work: autoWork }),
+  });
+  if (!resp.ok) throw new Error("Failed to update task auto_work");
+  return resp.json();
+}
+
 export async function triggerStage(
   id: string,
   stage: "plan" | "work" | "review"

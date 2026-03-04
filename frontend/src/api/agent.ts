@@ -14,3 +14,21 @@ export async function fetchIntegrationHealth(): Promise<IntegrationHealth[]> {
   if (!resp.ok) throw new Error("Failed to fetch integration health");
   return resp.json();
 }
+
+export async function triggerJiraSync(): Promise<{
+  status: string;
+  imported: number;
+  pushed: number;
+}> {
+  const resp = await apiFetch(`${BASE}/jira/sync`, { method: "POST" });
+  if (!resp.ok) throw new Error("Failed to trigger Jira sync");
+  return resp.json();
+}
+
+export async function fetchJiraStatusDefaults(): Promise<
+  Record<string, string>
+> {
+  const resp = await apiFetch(`${BASE}/jira/status-mapping/defaults`);
+  if (!resp.ok) throw new Error("Failed to fetch Jira status mapping defaults");
+  return resp.json();
+}

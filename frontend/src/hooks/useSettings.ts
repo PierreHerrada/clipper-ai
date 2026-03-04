@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { fetchJiraStatusDefaults } from "../api/agent";
 import {
   fetchSetting,
   fetchSettingHistory,
@@ -174,12 +175,174 @@ export function useMaxActiveAgents() {
   return { value, setValue, loading, saving, error, lastSaved, save };
 }
 
+export function useAutoWork() {
+  const [enabled, setEnabled] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await fetchSetting("auto_work");
+      setEnabled(data.value === "true");
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const toggle = useCallback(async () => {
+    const newValue = !enabled;
+    try {
+      setSaving(true);
+      await updateSetting("auto_work", newValue ? "true" : "false");
+      setEnabled(newValue);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setSaving(false);
+    }
+  }, [enabled]);
+
+  return { enabled, loading, saving, error, toggle };
+}
+
+export function useJiraSyncInterval() {
+  const [value, setValue] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await fetchSetting("jira_sync_interval");
+      setValue(data.value || "60");
+      setLastSaved(data.updated_at);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const save = useCallback(async (newValue: string) => {
+    try {
+      setSaving(true);
+      const data = await updateSetting("jira_sync_interval", newValue);
+      setValue(data.value);
+      setLastSaved(data.updated_at);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
+  return { value, setValue, loading, saving, error, lastSaved, save };
+}
+
 export function useSkills() {
   return useNamedItems<SkillItem>("skills");
 }
 
 export function useSubagents() {
   return useNamedItems<SubagentItem>("subagents");
+}
+
+export const TASK_STATUSES = [
+  "backlog",
+  "planned",
+  "working",
+  "reviewing",
+  "done",
+  "failed",
+] as const;
+
+export function useJiraStatusMapping() {
+  const [entries, setEntries] = useState<[string, string][]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await fetchSetting("jira_status_mapping");
+      if (data.value) {
+        try {
+          const parsed = JSON.parse(data.value);
+          if (typeof parsed === "object" && parsed !== null) {
+            setEntries(Object.entries(parsed));
+          }
+        } catch {
+          setEntries([]);
+        }
+      } else {
+        // No mapping saved yet — load backend defaults
+        try {
+          const defaults = await fetchJiraStatusDefaults();
+          setEntries(Object.entries(defaults));
+        } catch {
+          setEntries([]);
+        }
+      }
+      setLastSaved(data.updated_at);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const save = useCallback(async () => {
+    try {
+      setSaving(true);
+      const record = Object.fromEntries(entries);
+      const data = await updateSetting(
+        "jira_status_mapping",
+        JSON.stringify(record),
+      );
+      setLastSaved(data.updated_at);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setSaving(false);
+    }
+  }, [entries]);
+
+  const resetToDefaults = useCallback(async () => {
+    try {
+      const defaults = await fetchJiraStatusDefaults();
+      setEntries(Object.entries(defaults));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to fetch defaults");
+    }
+  }, []);
+
+  return { entries, setEntries, save, resetToDefaults, loading, saving, error, lastSaved };
 }
 
 export function useLessons() {

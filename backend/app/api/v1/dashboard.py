@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter
 
 from app.models import AgentRun, RunStage, RunStatus, Task, TaskStatus
@@ -23,11 +25,17 @@ async def get_stats() -> dict:
         stage_runs = await AgentRun.filter(stage=stage)
         cost_by_stage[stage.value] = sum(float(r.cost_usd) for r in stage_runs)
 
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    completed_today = await Task.active().filter(
+        status=TaskStatus.DONE, updated_at__gte=today_start,
+    ).count()
+
     return {
         "total_cost_usd": round(total_cost, 2),
         "active_runs": active_runs,
         "tasks_by_status": tasks_by_status,
         "cost_by_stage": cost_by_stage,
+        "completed_today": completed_today,
     }
 
 

@@ -6,7 +6,12 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.integrations.jira.client import JiraIntegration
-from app.integrations.jira.sync import import_jira_issue
+from app.integrations.jira.sync import (
+    _DEFAULT_STATUS_MAP,
+    import_jira_issue,
+    push_board_tasks_to_jira,
+    sync_jira_tickets,
+)
 from app.integrations.registry import IntegrationRegistry
 from app.models.task import Task
 
@@ -22,8 +27,23 @@ def _get_jira() -> JiraIntegration:
     return jira
 
 
+@router.get("/status-mapping/defaults", status_code=200)
+async def get_status_mapping_defaults() -> dict:
+    """Return the built-in default Jira-to-Corsair status mapping."""
+    return {k: v.value for k, v in _DEFAULT_STATUS_MAP.items()}
+
+
 class JiraImportRequest(BaseModel):
     issue_key: str
+
+
+@router.post("/sync", status_code=200)
+async def trigger_sync() -> dict:
+    """Trigger an immediate Jira sync (pull + push)."""
+    jira = _get_jira()
+    imported = await sync_jira_tickets(jira)
+    pushed = await push_board_tasks_to_jira(jira)
+    return {"status": "ok", "imported": imported, "pushed": pushed}
 
 
 @router.post("/import", status_code=200)

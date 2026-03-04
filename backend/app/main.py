@@ -125,9 +125,9 @@ def create_app() -> FastAPI:
 
             task = run.task
             if task.status in (TaskStatus.WORKING, TaskStatus.REVIEWING):
-                task.status = TaskStatus.FAILED
+                task.status = TaskStatus.PLANNED
                 await task.save()
-                logger.info("Marked task %s as failed", task.id)
+                logger.info("Marked task %s as planned (run failed)", task.id)
 
         logger.info("Shutdown cleanup complete")
 

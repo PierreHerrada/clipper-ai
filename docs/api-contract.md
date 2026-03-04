@@ -61,6 +61,7 @@ Returns all tasks ordered by `created_at` descending.
     "repo": "string|null",
     "plan": "string",
     "analysis": "string",
+    "auto_work": true,
     "created_at": "ISO 8601",
     "latest_run": null
   }
@@ -87,6 +88,7 @@ Returns a single task with its latest agent run and recent logs.
   "repo": "string|null",
   "plan": "string",
   "analysis": "string",
+  "auto_work": true,
   "created_at": "ISO 8601",
   "latest_run": {
     "id": "uuid",
@@ -111,12 +113,18 @@ Returns a single task with its latest agent run and recent logs.
 
 #### `PATCH /api/v1/tasks/{id}`
 
-Update task status.
+Update task fields.
 
 **Request Body:**
 ```json
-{"status": "backlog|planned|working|reviewing|done|failed"}
+{
+  "status": "backlog|planned|working|reviewing|done|failed",
+  "repo": "string|null",
+  "auto_work": true
+}
 ```
+
+All fields are optional.
 
 **Response:** `200 OK` — Updated task object (same shape as GET)
 
@@ -347,6 +355,49 @@ Performs real health checks against each configured integration (network calls w
     "error": null
   }
 ]
+```
+
+---
+
+### Jira
+
+#### `POST /api/v1/jira/sync`
+
+Trigger an immediate Jira sync (pull issues from Jira + push board tasks to Jira).
+
+**Response:** `200 OK`
+```json
+{
+  "status": "ok",
+  "imported": 0,
+  "pushed": 0
+}
+```
+
+**Error:** `503 Service Unavailable`
+```json
+{"detail": "Jira integration is not configured"}
+```
+
+#### `GET /api/v1/jira/status-mapping/defaults`
+
+Returns the built-in default Jira-to-Corsair status mapping. Used by the frontend to populate the status mapping editor and for the "Reset Defaults" action.
+
+**Response:** `200 OK`
+```json
+{
+  "to do": "backlog",
+  "backlog": "backlog",
+  "icebox": "backlog",
+  "selected for development": "planned",
+  "planned": "planned",
+  "in progress": "working",
+  "in review": "reviewing",
+  "review": "reviewing",
+  "done": "done",
+  "closed": "done",
+  "resolved": "done"
+}
 ```
 
 ---
@@ -653,7 +704,7 @@ Create or update a setting. When `key` is `"lessons"`, a `setting_history` entry
 }
 ```
 
-**Known setting keys:** `base_prompt`, `skills`, `subagents`, `lessons`, `max_active_agents`
+**Known setting keys:** `base_prompt`, `skills`, `subagents`, `lessons`, `max_active_agents`, `auto_work`, `jira_sync_interval`, `jira_status_mapping`
 
 #### `GET /api/v1/settings/{key}/history`
 
@@ -735,6 +786,7 @@ interface Task {
   repo: string | null;
   plan: string;
   analysis: string;
+  auto_work: boolean | null;
   created_at: string;
   latest_run: AgentRun | null;
 }

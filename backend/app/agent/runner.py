@@ -892,6 +892,35 @@ async def run_agent(
                 plan_text=last_assistant_text, pr_url=detected_pr_url,
             )
             await _emit(run.id, "Notifications sent.", ws_broadcast)
+
+            # Auto-trigger work stage after successful plan
+            if stage == RunStage.PLAN:
+                task_fresh = await Task.get(id=task.id)
+                should_auto_work = task_fresh.auto_work
+                if should_auto_work is None:
+                    from app.models.setting import Setting as _AWSetting
+
+                    aw_setting = await _AWSetting.filter(key="auto_work").first()
+                    should_auto_work = aw_setting is not None and aw_setting.value == "true"
+                if should_auto_work:
+                    # Enforce max_active_agents before auto-triggering
+                    from app.models.setting import Setting as _MASetting
+
+                    ma_setting = await _MASetting.filter(key="max_active_agents").first()
+                    try:
+                        max_active = int(ma_setting.value) if ma_setting and ma_setting.value else 0
+                    except (ValueError, TypeError):
+                        max_active = 0
+                    running_count = await AgentRun.filter(status=RunStatus.RUNNING).count()
+                    if max_active <= 0 or running_count < max_active:
+                        await _emit(run.id, "Auto-triggering work stage...", ws_broadcast)
+                        await run_agent(task_fresh, RunStage.WORK, ws_broadcast=ws_broadcast)
+                    else:
+                        await _emit(
+                            run.id,
+                            f"Auto-work skipped: max active agents limit reached ({max_active}).",
+                            ws_broadcast,
+                        )
         else:
             stopped_by_user = run_id_str in _stopped_runs
             logger.error(

@@ -20,6 +20,7 @@ router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 class TaskUpdate(BaseModel):
     status: Optional[TaskStatus] = None
     repo: Optional[str] = None
+    auto_work: Optional[bool] = None
 
 
 async def _task_to_dict(task: Task) -> dict:
@@ -38,6 +39,7 @@ async def _task_to_dict(task: Task) -> dict:
         "repo": task.repo,
         "plan": task.plan,
         "analysis": task.analysis,
+        "auto_work": task.auto_work,
         "created_at": task.created_at.isoformat(),
         "latest_run": _run_to_dict(latest_run) if latest_run else None,
     }
@@ -84,6 +86,8 @@ async def update_task(task_id: str, body: TaskUpdate) -> dict:
         updates["status"] = body.status
     if body.repo is not None:
         updates["repo"] = body.repo if body.repo != "" else None
+    if "auto_work" in body.model_fields_set:
+        updates["auto_work"] = body.auto_work
     if updates:
         await Task.filter(id=task_id).update(**updates)
     task = await Task.get(id=task_id)

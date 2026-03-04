@@ -3,8 +3,10 @@ import LessonsEditor from "../components/LessonsEditor";
 import NamedItemsEditor from "../components/NamedItemsEditor";
 import { useRepositories } from "../hooks/useRepositories";
 import {
+  useAutoWork,
   useBasePrompt,
   useLessons,
+  useJiraSyncInterval,
   useMaxActiveAgents,
   useSkills,
   useSubagents,
@@ -95,6 +97,8 @@ export default function Settings() {
   const subagents = useSubagents();
   const lessons = useLessons();
   const maxAgents = useMaxActiveAgents();
+  const autoWork = useAutoWork();
+  const jiraSyncInterval = useJiraSyncInterval();
 
   if (loading) {
     return (
@@ -308,6 +312,76 @@ export default function Settings() {
             className="px-4 py-2 bg-foam/10 border border-foam/20 rounded-lg text-foam text-sm hover:bg-foam/20 disabled:opacity-50 cursor-pointer"
           >
             {maxAgents.saving ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </div>
+
+      {/* Auto Work */}
+      <div className="bg-abyss border border-foam/8 rounded-lg p-4 mt-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <label className="block text-white text-sm font-medium mb-1">
+              Auto Work
+            </label>
+            <p className="text-mist text-xs">
+              Automatically trigger the work stage when a plan completes
+              successfully
+            </p>
+          </div>
+          <button
+            onClick={autoWork.toggle}
+            disabled={autoWork.saving || autoWork.loading}
+            className={`w-10 h-5 rounded-full relative transition-colors cursor-pointer ${
+              autoWork.enabled ? "bg-foam/60" : "bg-foam/20"
+            }`}
+            role="switch"
+            aria-checked={autoWork.enabled}
+          >
+            <span
+              className={`block w-3.5 h-3.5 bg-white rounded-full absolute top-0.5 transition-transform ${
+                autoWork.enabled ? "translate-x-5" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+        </div>
+        {autoWork.error && (
+          <div className="text-coral text-sm mt-2">{autoWork.error}</div>
+        )}
+      </div>
+
+      {/* Jira Sync Interval */}
+      <div className="bg-abyss border border-foam/8 rounded-lg p-4 mt-6">
+        <label className="block text-white text-sm font-medium mb-2">
+          Jira Sync Interval
+        </label>
+        <p className="text-mist text-xs mb-3">
+          How often to poll Jira for updates (in seconds). Default: 60.
+        </p>
+
+        {jiraSyncInterval.error && (
+          <div className="text-coral text-sm mb-3">{jiraSyncInterval.error}</div>
+        )}
+
+        <input
+          type="number"
+          min="10"
+          value={jiraSyncInterval.value}
+          onChange={(e) => jiraSyncInterval.setValue(e.target.value)}
+          className="w-32 bg-deep border border-foam/20 rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-foam/50"
+          placeholder="60"
+        />
+        <div className="flex items-center justify-between mt-3">
+          <div className="text-mist text-xs">
+            {jiraSyncInterval.lastSaved
+              ? `Last saved: ${new Date(jiraSyncInterval.lastSaved).toLocaleString()}`
+              : "Not saved yet"}
+          </div>
+          <button
+            onClick={() => jiraSyncInterval.save(jiraSyncInterval.value)}
+            disabled={jiraSyncInterval.saving}
+            className="px-4 py-2 bg-foam/10 border border-foam/20 rounded-lg text-foam text-sm hover:bg-foam/20 disabled:opacity-50 cursor-pointer"
+          >
+            {jiraSyncInterval.saving ? "Saving..." : "Save"}
           </button>
         </div>
       </div>
