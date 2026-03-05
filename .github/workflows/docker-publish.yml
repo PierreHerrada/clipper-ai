@@ -33,10 +33,11 @@ jobs:
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/corsair
           tags: |
+            type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
 
       - name: Build and push
         uses: docker/build-push-action@v6
