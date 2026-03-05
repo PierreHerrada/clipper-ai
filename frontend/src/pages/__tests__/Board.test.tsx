@@ -37,6 +37,7 @@ describe("Board", () => {
         pr_url: null,
         pr_number: null,
         repo: null,
+        auto_work: null,
         analysis: "",
         created_at: "2025-01-01T00:00:00Z",
         latest_run: null,

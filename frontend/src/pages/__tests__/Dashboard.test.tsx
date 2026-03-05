@@ -36,6 +36,7 @@ const defaultStats = {
     failed: 0,
   },
   cost_by_stage: { plan: 1.5, work: 3.0, review: 1.0, investigate: 0 },
+  completed_today: 0,
 };
 
 afterEach(() => { vi.restoreAllMocks(); });
@@ -87,6 +88,7 @@ describe("Dashboard", () => {
         pr_url: null,
         pr_number: null,
         repo: null,
+        auto_work: null,
         analysis: "",
         created_at: "2025-01-01T00:00:00Z",
         latest_run: {
@@ -132,6 +134,7 @@ describe("Dashboard", () => {
         pr_url: null,
         pr_number: null,
         repo: null,
+        auto_work: null,
         analysis: "",
         created_at: "2025-01-01T00:00:00Z",
         latest_run: {

@@ -110,6 +110,26 @@ class JiraIntegration(BaseIntegration):
             return resp.json()
 
     async def create_issue(self, title: str, description: str, acceptance: str) -> dict:
+        # Jira rejects summaries containing newline characters
+        title = " ".join(title.split())
+        # Build ADF content blocks, skipping empty text to avoid Jira 400 errors
+        content_blocks = []
+        if description:
+            content_blocks.append({
+                "type": "paragraph",
+                "content": [{"type": "text", "text": description}],
+            })
+        if acceptance:
+            content_blocks.append({
+                "type": "paragraph",
+                "content": [{"type": "text", "text": f"Acceptance: {acceptance}"}],
+            })
+        if not content_blocks:
+            content_blocks.append({
+                "type": "paragraph",
+                "content": [{"type": "text", "text": title}],
+            })
+
         payload = {
             "fields": {
                 "project": {"key": settings.jira_project_key},
@@ -117,18 +137,7 @@ class JiraIntegration(BaseIntegration):
                 "description": {
                     "type": "doc",
                     "version": 1,
-                    "content": [
-                        {
-                            "type": "paragraph",
-                            "content": [{"type": "text", "text": description}],
-                        },
-                        {
-                            "type": "paragraph",
-                            "content": [
-                                {"type": "text", "text": f"Acceptance: {acceptance}"}
-                            ],
-                        },
-                    ],
+                    "content": content_blocks,
                 },
                 "issuetype": {"name": "Task"},
                 "labels": [settings.jira_sync_label],
@@ -141,6 +150,11 @@ class JiraIntegration(BaseIntegration):
                 json=payload,
                 timeout=30,
             )
+            if resp.status_code != 201:
+                logger.error(
+                    "Jira: create issue failed with status %d — %s",
+                    resp.status_code, resp.text[:500],
+                )
             resp.raise_for_status()
             data = resp.json()
             return {
