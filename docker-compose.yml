@@ -4,7 +4,3 @@ services:
     ports:
       - "${PORT_FRONTEND:-80}:80"
       - "${PORT_BACKEND:-8000}:8000"
-    env_file:
-      - .env
-    volumes:
-      - ./logs:/app/logs
