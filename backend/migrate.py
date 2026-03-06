@@ -16,6 +16,8 @@ import logging
 import os
 from pathlib import Path
 
+import re
+
 import asyncpg
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -32,9 +34,24 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 
 
 def _parse_database_url(url: str) -> dict:
-    """Convert a postgres:// URL into asyncpg connect kwargs."""
-    url = url.replace("postgres://", "postgresql://", 1)
-    return {"dsn": url}
+    """Convert a postgres:// URL into asyncpg connect kwargs.
+
+    Parses with regex to avoid urllib IPv6 errors when the password
+    contains special characters like brackets.
+    """
+    pattern = r"postgres(?:ql)?://(?P<user>[^:]+):(?P<password>.+)@(?P<host>[^:/]+)(?::(?P<port>\d+))?/(?P<database>.+)"
+    m = re.match(pattern, url)
+    if not m:
+        # Fallback: let asyncpg try the DSN directly
+        return {"dsn": url.replace("postgres://", "postgresql://", 1)}
+    kwargs: dict = {
+        "host": m.group("host"),
+        "port": int(m.group("port")) if m.group("port") else 5432,
+        "user": m.group("user"),
+        "password": m.group("password"),
+        "database": m.group("database"),
+    }
+    return kwargs
 
 
 def _discover_migrations() -> list[Path]:
