@@ -93,3 +93,11 @@ Read this file at the start of every phase and every new session.
 **Root cause:** The `search_issues` method was never implemented on `JiraIntegration` in `client.py`, even though `sync.py` depended on it.
 **Solution:** Added `search_issues(jql)` method to `JiraIntegration` that calls `/rest/api/3/search` with the JQL query. Also added verbose logging throughout Jira sync and Slack bot to make future issues visible in the new Logs tab.
 **Applies to:** Always verify that methods called cross-module actually exist. Blanket `except Exception` can hide missing method errors.
+
+---
+
+### PHASE 9 — Tortoise .only() makes unlisted fields inaccessible
+**Error:** `AttributeError: 'AgentRun' object has no attribute 'tokens_in'` when accessing a field not included in `.only()`.
+**Root cause:** Tortoise ORM's `.only()` creates partial model instances. Accessing any field not listed in `.only()` raises `AttributeError` instead of returning a default.
+**Solution:** Either include all accessed fields in `.only()`, or guard access behind the same flag that controls `.only()` usage.
+**Applies to:** Any Tortoise ORM query using `.only()` or `.defer()`. Always ensure the serializer only accesses the fields that were loaded.
